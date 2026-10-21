@@ -1,0 +1,15 @@
+{
+  "name": "fleure",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @fleure/api",
+    "dev:clinician": "npm run dev -w @fleure/clinician",
+    "dev:mobile": "npm run start -w @fleure/mobile",
+    "test": "npm run test -w @fleure/api && node --test apps/mobile/test/*.test.mjs",
+    "check": "npm run check --workspaces --if-present",
+    "build": "npm run build -w @fleure/clinician"
+  }
+}

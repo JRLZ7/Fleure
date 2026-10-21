@@ -1,0 +1,9 @@
+node_modules/
+.env
+.expo/
+dist/
+*.db
+*.db-*
+apps/mobile/ios/
+apps/mobile/android/
+

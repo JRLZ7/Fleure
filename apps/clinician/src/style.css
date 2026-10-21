@@ -1,0 +1,75 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #173c35;
+  background: #f4f7f6;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 32px;
+}
+h1 {
+  font-size: 28px;
+}
+h2 {
+  margin-top: 32px;
+}
+form {
+  max-width: 400px;
+}
+label {
+  display: block;
+  margin: 16px 0;
+}
+input,
+select,
+button {
+  font: inherit;
+  padding: 10px;
+  border: 1px solid #9baea8;
+  border-radius: 6px;
+}
+input,
+select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+}
+button {
+  background: #184f43;
+  color: white;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+section {
+  max-width: 650px;
+}
+.error {
+  color: #9b2020;
+  background: #ffeded;
+  padding: 12px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+th,
+td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #dce5e1;
+}
+.scroll {
+  overflow-x: auto;
+}
+p {
+  line-height: 1.5;
+}
