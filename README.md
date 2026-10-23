@@ -1,5 +1,10 @@
 # Fleure LED / BLE demo
 
+**Firmware update:** the ESP32 sketch now controls a pump on GPIO 25 and a
+solenoid valve on GPIO 26, replacing the LED outputs. See
+[firmware/README.md](firmware/README.md) for the current pin logic and bench-test
+limits. The app and simulator below still use their original LED-demo labels.
+
 An ESP32 LED-control prototype with an Expo patient app, Node.js API, and React clinician dashboard. **No pump or cuff control is implemented.**
 
 ## Requirements

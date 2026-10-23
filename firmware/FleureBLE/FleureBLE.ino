@@ -1,4 +1,6 @@
-// LED-only bench prototype. No pump or valve outputs.
+// Pump/valve bench control. GPIOs drive active-HIGH driver inputs, not loads directly.
+// Valve energized (HIGH) = vent closed; de-energized (LOW) = vent open.
+// No pressure regulation or overpressure detection is implemented.
 // ESP32 Arduino core 3.x, built-in BLE library.
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -6,7 +8,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-const int greenButton=18, redButton=19, greenLED=25, redLED=26;
+const int greenButton=18, redButton=19, pumpPin=25, solenoidPin=26;
 const char* SERVICE="b498a000-8a8a-4b27-a8c5-9d0a214c1000";
 const char* COMMAND="b498a001-8a8a-4b27-a8c5-9d0a214c1000";
 const char* STATE="b498a002-8a8a-4b27-a8c5-9d0a214c1000";
@@ -27,7 +29,13 @@ struct Button {
 Button green{greenButton}, red{redButton};
 void apply(bool on,const char* reason){
  bool changed=deviceOn!=on; deviceOn=on;
- digitalWrite(greenLED,on?HIGH:LOW);digitalWrite(redLED,on?LOW:HIGH);
+ if(on){
+  // Close the vent before starting the pump.
+  digitalWrite(solenoidPin,HIGH);digitalWrite(pumpPin,HIGH);
+ }else{
+  // Stop the pump before opening the vent.
+  digitalWrite(pumpPin,LOW);digitalWrite(solenoidPin,LOW);
+ }
  uint8_t value=on?1:0;stateCharacteristic->setValue(&value,1);
  if(changed){stateCharacteristic->notify();Serial.printf("State %s: %s\n",on?"ON":"OFF",reason);}
 }
@@ -51,10 +59,11 @@ class CommandCallbacks:public BLECharacteristicCallbacks {
 void setup(){
  Serial.begin(115200);
  pinMode(greenButton,INPUT_PULLUP);pinMode(redButton,INPUT_PULLUP);
- pinMode(greenLED,OUTPUT);pinMode(redLED,OUTPUT);
- digitalWrite(greenLED,LOW);digitalWrite(redLED,HIGH);
+ // Initialize OFF before starting BLE: pump stopped, valve venting.
+ digitalWrite(pumpPin,LOW);digitalWrite(solenoidPin,LOW);
+ pinMode(pumpPin,OUTPUT);pinMode(solenoidPin,OUTPUT);
  mustReleaseGreen=digitalRead(greenButton)==LOW;
- BLEDevice::init("Fleure-LED");
+ BLEDevice::init("Fleure-Pump");
  auto server=BLEDevice::createServer();server->setCallbacks(new ServerCallbacks());
  auto service=server->createService(SERVICE);
  auto command=service->createCharacteristic(COMMAND,BLECharacteristic::PROPERTY_WRITE);
@@ -62,7 +71,7 @@ void setup(){
  stateCharacteristic=service->createCharacteristic(STATE,BLECharacteristic::PROPERTY_READ|BLECharacteristic::PROPERTY_NOTIFY);
  stateCharacteristic->addDescriptor(new BLE2902());uint8_t off=0;stateCharacteristic->setValue(&off,1);
  service->start();auto advertising=BLEDevice::getAdvertising();advertising->addServiceUUID(SERVICE);advertising->setScanResponse(true);advertising->start();
- Serial.println("Fleure LED prototype ready, OFF");
+ Serial.println("Fleure pump prototype ready, OFF (pump stopped, vent open)");
 }
 void loop(){
  unsigned long now=millis();bool greenPress=green.press(now);red.press(now);
