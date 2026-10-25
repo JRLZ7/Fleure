@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   AppState,
-  Button,
+  ActivityIndicator,
+  Keyboard,
+  KeyboardEvent,
+  Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,7 +15,6 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { createBleDriver } from "./src/ble";
-import { createSimulator } from "./src/simulator";
 import { Driver, DeviceState } from "./src/protocol";
 type Event = {
   id: string;
@@ -37,8 +40,7 @@ export default function App() {
     [password, setPassword] = useState(""),
     [token, setToken] = useState(""),
     [user, setUser] = useState<User | null>(null);
-  const [mode, setMode] = useState<"simulator" | "hardware">("simulator"),
-    [connected, setConnected] = useState(false),
+  const [connected, setConnected] = useState(false),
     [state, setState] = useState<DeviceState>("unknown"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -53,6 +55,58 @@ export default function App() {
     syncing = useRef(false),
     persisting = useRef(Promise.resolve()),
     interrupted = useRef(false);
+  const scrollView = useRef<ScrollView | null>(null);
+  const emailInput = useRef<TextInput | null>(null);
+  const passwordInput = useRef<TextInput | null>(null);
+  const serverInput = useRef<TextInput | null>(null);
+  const focusedInput = useRef<TextInput | null>(null);
+  const scrollOffset = useRef(0);
+  const keyboardTop = useRef<number | null>(null);
+  const [keyboardSpace, setKeyboardSpace] = useState(0);
+
+  function revealFocusedInput() {
+    const input = focusedInput.current;
+    const scroll = scrollView.current;
+    if (!input || !scroll || keyboardTop.current === null) return;
+    scroll.measureInWindow((_x, top, _width, height) => {
+      input.measureInWindow((_inputX, inputTop, _inputWidth, inputHeight) => {
+        if (focusedInput.current !== input || keyboardTop.current === null) return;
+        const visibleBottom = Math.min(top + height, keyboardTop.current) - 24;
+        const delta = inputTop + inputHeight > visibleBottom
+          ? inputTop + inputHeight - visibleBottom
+          : inputTop < top + 16 ? inputTop - top - 16 : 0;
+        if (delta !== 0) {
+          scroll.scrollTo({ y: Math.max(0, scrollOffset.current + delta), animated: false });
+        }
+      });
+    });
+  }
+
+  function focusField(input: TextInput | null) {
+    focusedInput.current = input;
+    requestAnimationFrame(revealFocusedInput);
+  }
+
+  useEffect(() => {
+    const show = (e: KeyboardEvent) => {
+      keyboardTop.current = e.endCoordinates.screenY;
+      // Extra content space makes even the final field reachable by scrolling.
+      setKeyboardSpace(e.endCoordinates.height);
+      requestAnimationFrame(revealFocusedInput);
+    };
+    const hide = () => {
+      keyboardTop.current = null;
+      setKeyboardSpace(0);
+    };
+    const subscriptions = [
+      Keyboard.addListener("keyboardWillChangeFrame", show),
+      Keyboard.addListener("keyboardDidShow", show),
+      Keyboard.addListener("keyboardWillHide", hide),
+      Keyboard.addListener("keyboardDidHide", hide),
+    ];
+    return () => subscriptions.forEach((subscription) => subscription.remove());
+  }, []);
+
   function log(text: string) {
     setLogs((old) =>
       [`${new Date().toLocaleTimeString()} ${text}`, ...old].slice(0, 30),
@@ -207,13 +261,13 @@ export default function App() {
   async function connect() {
     if (!user) return;
     interrupted.current = false;
-    const d = mode === "simulator" ? createSimulator() : createBleDriver();
+    const d = createBleDriver();
     driver.current = d;
     const session: Session = {
       id: Crypto.randomUUID(),
       patient: user.id,
       device: "connecting",
-      mode,
+      mode: "hardware",
       started: new Date().toISOString(),
       events: [],
     };
@@ -221,12 +275,7 @@ export default function App() {
     active.current = session;
     try {
       const id = await d.connect(
-        (s) =>
-          event(
-            s,
-            mode === "simulator" ? "simulator" : "device",
-            "state_report",
-          ),
+        (s) => event(s, "device", "state_report"),
         () => {
           interrupted.current = true;
           setConnected(false);
@@ -252,189 +301,193 @@ export default function App() {
       throw e;
     }
   }
+  const deviceLabel = !connected ? "Not connected" : state === "on" ? "LED is on" : state === "off" ? "LED is off" : "Awaiting device state";
   return (
-    <ScrollView
-      contentContainerStyle={styles.page}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.title}>Fleure · Patient demo</Text>
-      <Text>LED prototype only. Keep the app in the foreground.</Text>
-      {!!error && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {error}
-        </Text>
-      )}
-      {!ready && <Text>Loading saved events…</Text>}
-      {!token ? (
-        <View style={styles.card}>
-          <Text>API address (use your computer’s LAN IP on a phone)</Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            value={url}
-            onChangeText={setUrl}
-          />
-          <Text>Email</Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <Text>Password</Text>
-          <TextInput
-            style={styles.input}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          <Button
-            title="Sign in"
-            disabled={busy || !ready}
-            onPress={() =>
-              void action(async () => {
-                const b = await api("/login", {
-                  method: "POST",
-                  body: JSON.stringify({ email, password }),
-                });
-                if (b.user.role !== "patient") {
-                  await api("/logout", { method: "POST" }, b.token);
-                  throw new Error(
-                    "Use a patient account. Clinicians use the web dashboard.",
-                  );
-                }
-                setUser(b.user);
-                setToken(b.token);
-                setPassword("");
-              })
-            }
-          />
+    <SafeAreaView style={styles.screen}>
+      <ScrollView
+        ref={scrollView}
+        style={styles.keyboardArea}
+        contentContainerStyle={[styles.page, { paddingBottom: 36 + keyboardSpace }]}
+        onScroll={(e) => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => requestAnimationFrame(revealFocusedInput)}
+        onLayout={() => requestAnimationFrame(revealFocusedInput)}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+      >
+        <View style={styles.header}>
+          <View style={styles.brandMark}><Text style={styles.brandLetter}>f</Text></View>
+          <View style={styles.grow}>
+            <Text style={styles.brand}>fleure</Text>
+            <Text style={styles.eyebrow}>YOUR DEVICE COMPANION</Text>
+          </View>
+          <View style={styles.badge}><Text style={styles.badgeText}>PATIENT</Text></View>
         </View>
-      ) : (
-        <>
-          <Text style={styles.heading}>{user?.name}</Text>
-          <Text>API: {url}</Text>
+
+        <View style={styles.intro}>
+          <Text style={styles.title}>{token ? `Hello, ${user?.name || "there"}.` : "Welcome back."}</Text>
+          <Text style={styles.subtitle}>{token ? "Your device, a little closer." : "Sign in to connect to your Fleure device."}</Text>
+        </View>
+        {!!error && <View style={styles.errorBox}><Text accessibilityRole="alert" style={styles.error}>{error}</Text></View>}
+        {!ready && <View style={styles.inline}><ActivityIndicator color="#17685D" /><Text style={styles.body}>Loading saved events…</Text></View>}
+
+        {!token ? (
           <View style={styles.card}>
-            <Text style={styles.heading}>
-              Device mode: {mode.toUpperCase()}
-            </Text>
-            <Button
-              title={
-                mode === "simulator"
-                  ? "Switch to real ESP32 BLE"
-                  : "Switch to simulator"
+            <Text style={styles.heading}>Your account</Text>
+            <Text style={styles.body}>Use the patient account provided for this prototype.</Text>
+            <Text style={styles.label}>EMAIL ADDRESS</Text>
+            <TextInput ref={emailInput} onFocus={() => focusField(emailInput.current)} returnKeyType="next" onSubmitEditing={() => passwordInput.current?.focus()} blurOnSubmit={false} accessibilityLabel="Email address" style={styles.input} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="username" value={email} onChangeText={setEmail} placeholder="patient@fleure.local" placeholderTextColor="#64766E" />
+            <Text style={styles.label}>PASSWORD</Text>
+            <TextInput ref={passwordInput} onFocus={() => focusField(passwordInput.current)} returnKeyType="next" onSubmitEditing={() => serverInput.current?.focus()} blurOnSubmit={false} accessibilityLabel="Password" style={styles.input} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" value={password} onChangeText={setPassword} placeholder="Enter your password" placeholderTextColor="#64766E" />
+            <Text style={styles.label}>SERVER ADDRESS</Text>
+            <TextInput ref={serverInput} onFocus={() => focusField(serverInput.current)} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} accessibilityLabel="API server address" style={styles.input} autoCapitalize="none" autoCorrect={false} keyboardType="url" value={url} onChangeText={setUrl} placeholder="http://192.168.1.10:3001" placeholderTextColor="#64766E" />
+            <Text style={styles.caption}>On a phone, use your computer’s local network address.</Text>
+            <ActionButton title={busy ? "Signing in…" : "Sign in"} disabled={busy || !ready} onPress={() => void action(async () => {
+              const b = await api("/login", { method: "POST", body: JSON.stringify({ email: email.trim(), password }) });
+              if (b.user.role !== "patient") {
+                await api("/logout", { method: "POST" }, b.token);
+                throw new Error("Use a patient account. Clinicians use the web dashboard.");
               }
-              disabled={busy || connected}
-              onPress={() => {
-                setMode(mode === "simulator" ? "hardware" : "simulator");
-                setState("unknown");
-              }}
-            />
-            <Text>Connection: {connected ? "Connected" : "Disconnected"}</Text>
-            <Text style={styles.state}>State: {state.toUpperCase()}</Text>
-            <Text>
-              {mode === "simulator"
-                ? "Simulated LEDs — no hardware commands"
-                : "Actual ESP32 state reported over BLE"}
-            </Text>
-            <Button
-              title={connected ? "Disconnect" : "Connect"}
-              disabled={busy}
-              onPress={() => void action(connected ? disconnect : connect)}
-            />
-            <View style={styles.row}>
-              <Button
-                title="START"
-                disabled={busy || !connected || state === "unknown"}
-                onPress={() =>
-                  void action(async () => {
-                    await driver.current!.command(true);
-                  })
-                }
-              />
-              <Button
-                title="STOP"
-                disabled={!connected}
-                onPress={() =>
-                  void action(async () => {
-                    await driver.current!.command(false);
-                  })
-                }
-              />
+              Keyboard.dismiss(); setUser(b.user); setToken(b.token); setPassword("");
+            })} />
+          </View>
+        ) : (
+          <>
+            <View style={styles.deviceCard}>
+              <View style={styles.spread}>
+                <Text style={styles.lightEyebrow}>FLEURE DEVICE</Text>
+                <View style={styles.connectionBadge}>
+                  <View style={[styles.dot, { backgroundColor: connected ? "#BDE9CF" : "#D4DEDA" }]} />
+                  <Text style={styles.connectionText}>{connected ? "Connected" : "Offline"}</Text>
+                </View>
+              </View>
+              <View style={styles.stateArea}>
+                <View style={[styles.stateRing, state === "on" && connected ? styles.stateRingOn : undefined]}>
+                  <View style={[styles.stateCore, state === "on" && connected ? styles.stateCoreOn : undefined]}>
+                    <Text style={styles.stateSymbol}>{!connected || state === "unknown" ? "—" : state === "on" ? "ON" : "OFF"}</Text>
+                  </View>
+                </View>
+                <Text accessibilityLiveRegion="polite" style={styles.deviceState}>{deviceLabel}</Text>
+                <Text style={styles.deviceHint}>{connected ? "Live status reported by your ESP32" : "Keep your ESP32 nearby and Bluetooth enabled."}</Text>
+              </View>
+              <ActionButton title={busy && !connected ? "Please wait…" : connected ? "Disconnect device" : "Connect device"} variant="light" disabled={busy || !ready} onPress={() => void action(connected ? disconnect : connect)} />
+              <View style={styles.controlRow}>
+                <View style={styles.grow}><ActionButton title="Start LED" variant="light" disabled={busy || !connected || state === "unknown"} onPress={() => void action(async () => {
+                  const d = driver.current; if (!d) throw new Error("Connect your device first."); await d.command(true);
+                })} /></View>
+                <View style={styles.grow}><ActionButton title="Stop LED" variant="stop" disabled={!connected} onPress={() => void action(async () => {
+                  const d = driver.current; if (!d) throw new Error("Connect your device first."); await d.command(false);
+                })} /></View>
+              </View>
             </View>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.heading}>Session uploads</Text>
-            <Text>{pending} pending events on this phone</Text>
-            <Text>{status}</Text>
-            <Button
-              title="Sync uploads / refresh history"
-              disabled={busy}
-              onPress={() => void action(sync)}
-            />
-            {history.map((s) => (
-              <Text key={s.id}>
-                {new Date(s.started).toLocaleString()} · {s.mode} ·{" "}
-                {s.ended ? "ended" : "no end uploaded"}
-              </Text>
-            ))}
-          </View>
-          <Button
-            title="Sign out"
-            disabled={busy}
-            onPress={() =>
-              void action(async () => {
-                await disconnect();
-                await api("/logout", { method: "POST" });
-                setToken("");
-                setUser(null);
-                setHistory([]);
-                setStatus("");
-              })
-            }
-          />
-        </>
-      )}
-      <Text style={styles.heading}>Recent events</Text>
-      {logs.map((l, i) => (
-        <Text key={i} style={styles.log}>
-          {l}
-        </Text>
-      ))}
-      {busy && <Text>Working…</Text>}
-    </ScrollView>
+
+            <View style={styles.note}><Text style={styles.noteText}>LED prototype · Keep the app in the foreground while connected.</Text></View>
+
+            <View style={styles.card}>
+              <View style={styles.spread}>
+                <View style={styles.grow}><Text style={styles.heading}>Session uploads</Text><Text style={styles.body}>Saved on this phone until uploaded.</Text></View>
+                <View style={styles.countBadge}><Text style={styles.count}>{pending}</Text><Text style={styles.caption}>events</Text></View>
+              </View>
+              {!!status && <Text accessibilityLiveRegion="polite" style={styles.success}>{status}</Text>}
+              <ActionButton title="Sync & refresh history" variant="secondary" disabled={busy} onPress={() => void action(sync)} />
+              <Text style={styles.label}>RECENT SESSIONS</Text>
+              {!history.length ? <Text style={styles.caption}>Sync to load your session history.</Text> : history.map((s) => (
+                <View key={s.id} style={styles.historyRow}>
+                  <View style={styles.grow}><Text style={styles.historyTitle}>{new Date(s.started).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {new Date(s.started).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</Text><Text style={styles.caption}>{s.device}</Text></View>
+                  <Text style={styles.historyStatus}>{s.ended ? "Ended" : "No end uploaded"}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.card}>
+              <View style={styles.spread}><Text style={styles.heading}>Activity</Text><Text style={styles.caption}>This visit</Text></View>
+              {!logs.length ? <Text style={styles.body}>Device and connection events will appear here.</Text> : logs.slice(0, 10).map((line, i) => (
+                <View key={i} style={styles.activityRow}><View style={styles.activityDot} /><Text style={styles.log}>{line}</Text></View>
+              ))}
+            </View>
+            <ActionButton title="Sign out" variant="secondary" disabled={busy} onPress={() => void action(async () => {
+              await disconnect(); await api("/logout", { method: "POST" }); setToken(""); setUser(null); setHistory([]); setStatus(""); setLogs([]);
+            })} />
+          </>
+        )}
+        {busy && <View accessibilityLiveRegion="polite" style={styles.inline}><ActivityIndicator color="#17685D" /><Text style={styles.caption}>Working…</Text></View>}
+        <Text style={styles.footer}>FLEURE · BLUETOOTH DEVICE PROTOTYPE</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+type ActionButtonProps = {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "secondary" | "light" | "stop";
+};
+function ActionButton({ title, onPress, disabled = false, variant = "primary" }: ActionButtonProps) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, variant === "secondary" ? styles.buttonSecondary : variant === "light" ? styles.buttonLight : variant === "stop" ? styles.buttonStop : styles.buttonPrimary, disabled && styles.buttonDisabled, pressed && !disabled && styles.buttonPressed]}>
+    <Text style={[styles.buttonText, (variant === "secondary" || variant === "light") && styles.buttonTextDark, variant === "stop" && styles.buttonTextStop]}>{title}</Text>
+  </Pressable>;
+}
+
 const styles = StyleSheet.create({
-  page: {
-    padding: 24,
-    paddingTop: 60,
-    gap: 12,
-    maxWidth: 700,
-    width: "100%",
-    alignSelf: "center",
-  },
-  title: { fontSize: 26, fontWeight: "700" },
-  heading: { fontSize: 18, fontWeight: "600", marginTop: 12 },
-  card: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#bccbc5",
-    borderRadius: 8,
-    gap: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#9baea8",
-    padding: 12,
-    borderRadius: 4,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 16,
-  },
-  state: { fontSize: 28, fontWeight: "700" },
-  error: { color: "#a32020", padding: 12, backgroundColor: "#ffeaea" },
-  log: { fontSize: 12 },
+  keyboardArea: { flex: 1 },
+  screen: { flex: 1, backgroundColor: "#F5F5EF" },
+  page: { padding: 22, paddingBottom: 36, gap: 18, width: "100%", maxWidth: 620, alignSelf: "center" },
+  grow: { flex: 1, minWidth: 0 },
+  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 12 },
+  brandMark: { width: 44, height: 44, borderRadius: 16, backgroundColor: "#17685D", alignItems: "center", justifyContent: "center" },
+  brandLetter: { color: "#F3F4D7", fontSize: 34, fontWeight: "600", fontStyle: "italic", marginTop: -5 },
+  brand: { color: "#193F36", fontSize: 27, fontWeight: "700", letterSpacing: -1 },
+  eyebrow: { color: "#5E746B", fontSize: 9, fontWeight: "700", letterSpacing: 1.3, marginTop: 2 },
+  badge: { backgroundColor: "#E5ECE3", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20 },
+  badgeText: { color: "#355C4E", fontSize: 10, fontWeight: "700", letterSpacing: 1 },
+  intro: { marginTop: 14, gap: 6 },
+  title: { fontSize: 30, lineHeight: 37, fontWeight: "700", color: "#193F36", letterSpacing: -0.9 },
+  subtitle: { color: "#5E746B", fontSize: 15, lineHeight: 23 },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 24, padding: 21, gap: 14, borderWidth: 1, borderColor: "#E2E8DE" },
+  heading: { fontSize: 19, fontWeight: "700", color: "#193F36" },
+  body: { color: "#5B7167", fontSize: 14, lineHeight: 21 },
+  label: { color: "#5B7167", fontSize: 10, fontWeight: "700", letterSpacing: 1.2, marginTop: 5 },
+  input: { backgroundColor: "#F7F9F5", color: "#193F36", borderWidth: 1, borderColor: "#D4DED2", paddingHorizontal: 15, paddingVertical: 14, borderRadius: 13, fontSize: 16, minHeight: 50 },
+  caption: { color: "#5E746B", fontSize: 12, lineHeight: 18 },
+  deviceCard: { padding: 22, borderRadius: 28, backgroundColor: "#15594F", gap: 14 },
+  spread: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
+  lightEyebrow: { color: "#D8E7DC", fontSize: 10, fontWeight: "700", letterSpacing: 1.8 },
+  connectionBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 20, backgroundColor: "#2E6B60" },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  connectionText: { color: "#F5FAF5", fontSize: 11, fontWeight: "600" },
+  stateArea: { alignItems: "center", paddingVertical: 12, gap: 9 },
+  stateRing: { width: 124, height: 124, borderRadius: 62, borderWidth: 1, borderColor: "#548478", alignItems: "center", justifyContent: "center", marginBottom: 9 },
+  stateRingOn: { borderColor: "#C9E39D" },
+  stateCore: { width: 98, height: 98, borderRadius: 49, backgroundColor: "#2E6B60", alignItems: "center", justifyContent: "center" },
+  stateCoreOn: { backgroundColor: "#3B7862" },
+  stateSymbol: { color: "#ECF2C6", fontSize: 27, fontWeight: "600", letterSpacing: 2 },
+  deviceState: { color: "#FFFFFF", fontSize: 26, fontWeight: "600", textAlign: "center", letterSpacing: -0.5 },
+  deviceHint: { color: "#D3E3DA", fontSize: 13, lineHeight: 20, textAlign: "center" },
+  controlRow: { flexDirection: "row", gap: 10 },
+  button: { minHeight: 50, borderRadius: 15, paddingVertical: 14, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  buttonPrimary: { backgroundColor: "#17685D" },
+  buttonSecondary: { backgroundColor: "#E9EFE6", borderWidth: 1, borderColor: "#D6E0D3" },
+  buttonLight: { backgroundColor: "#EEF1CC" },
+  buttonStop: { backgroundColor: "#F6E4DC" },
+  buttonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700", textAlign: "center" },
+  buttonTextDark: { color: "#193F36" },
+  buttonTextStop: { color: "#7C3025" },
+  buttonDisabled: { opacity: 0.45 },
+  buttonPressed: { opacity: 0.8 },
+  note: { paddingHorizontal: 7 },
+  noteText: { color: "#5E746B", fontSize: 12, lineHeight: 18, textAlign: "center" },
+  countBadge: { backgroundColor: "#F0F3E6", borderRadius: 16, paddingVertical: 8, paddingHorizontal: 16, alignItems: "center" },
+  count: { fontSize: 25, fontWeight: "700", color: "#193F36" },
+  success: { color: "#17685D", fontSize: 13, lineHeight: 20 },
+  historyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 13, borderTopWidth: 1, borderTopColor: "#E9EEE5" },
+  historyTitle: { color: "#193F36", fontWeight: "600", fontSize: 13, marginBottom: 3 },
+  historyStatus: { color: "#5E746B", fontSize: 11, maxWidth: 90 },
+  activityRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  activityDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#7C9F8E", marginTop: 6 },
+  log: { flex: 1, color: "#5E746B", fontSize: 12, lineHeight: 19 },
+  errorBox: { backgroundColor: "#FAEAE4", padding: 15, borderRadius: 16, borderWidth: 1, borderColor: "#EBC8BC" },
+  error: { color: "#8A3227", fontSize: 14, lineHeight: 21 },
+  inline: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 9 },
+  footer: { color: "#5E746B", fontSize: 9, fontWeight: "600", letterSpacing: 1.4, textAlign: "center", marginTop: 8 },
 });
