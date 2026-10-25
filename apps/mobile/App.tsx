@@ -15,7 +15,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { createBleDriver } from "./src/ble";
-import { Driver, DeviceState } from "./src/protocol";
+import { Driver, DeviceState, Telemetry, isActive, PRESSURES, DURATIONS, formatTime } from "./src/protocol";
 type Event = {
   id: string;
   state: DeviceState;
@@ -41,7 +41,6 @@ export default function App() {
     [token, setToken] = useState(""),
     [user, setUser] = useState<User | null>(null);
   const [connected, setConnected] = useState(false),
-    [state, setState] = useState<DeviceState>("unknown"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [status, setStatus] = useState(""),
@@ -49,17 +48,24 @@ export default function App() {
     [history, setHistory] = useState<Session[]>([]),
     [logs, setLogs] = useState<string[]>([]),
     [ready, setReady] = useState(false);
+  const [therapy, setTherapy] = useState<Telemetry | null>(null);
+  const [targetMmHg, setTargetMmHg] = useState(200);
+  const [durationSeconds, setDurationSeconds] = useState(120);
+  const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const lastTelemetry = useRef<Telemetry | null>(null);
+  const commandGeneration = useRef(0);
   const driver = useRef<Driver | null>(null),
     queue = useRef<Session[]>([]),
     active = useRef<Session | null>(null),
     syncing = useRef(false),
     persisting = useRef(Promise.resolve()),
     interrupted = useRef(false);
-  const scrollView = useRef<ScrollView | null>(null);
-  const emailInput = useRef<TextInput | null>(null);
-  const passwordInput = useRef<TextInput | null>(null);
-  const serverInput = useRef<TextInput | null>(null);
-  const focusedInput = useRef<TextInput | null>(null);
+  const scrollView = useRef<React.ElementRef<typeof ScrollView> | null>(null);
+  const emailInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
+  const passwordInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
+  const serverInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
+  const focusedInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const scrollOffset = useRef(0);
   const keyboardTop = useRef<number | null>(null);
   const [keyboardSpace, setKeyboardSpace] = useState(0);
@@ -82,7 +88,7 @@ export default function App() {
     });
   }
 
-  function focusField(input: TextInput | null) {
+  function focusField(input: React.ElementRef<typeof TextInput> | null) {
     focusedInput.current = input;
     requestAnimationFrame(revealFocusedInput);
   }
@@ -124,7 +130,6 @@ export default function App() {
     return persisting.current;
   }
   function event(s: DeviceState, source: Event["source"], reason: string) {
-    setState(s);
     log(`${source}: ${s} (${reason})`);
     if (active.current) {
       active.current.events.push({
@@ -135,6 +140,36 @@ export default function App() {
         recorded: new Date().toISOString(),
       });
       void persist();
+    }
+  }
+  function clearTelemetry() {
+    lastTelemetry.current = null; setTherapy(null); setStarting(false); setStopping(false);
+    ++commandGeneration.current;
+  }
+  function receiveTelemetry(t: Telemetry) {
+    const previous = lastTelemetry.current;
+    lastTelemetry.current = t;
+    setTherapy(t);
+    if (!previous || (isActive(t) && previous.runId !== t.runId)) { setTargetMmHg(t.targetMmHg); setDurationSeconds(t.durationSeconds); }
+    // Upload phase changes, not five pressure samples every second. Pressure is live display only.
+    if (!previous || previous.phase !== t.phase || previous.reason !== t.reason || previous.runId !== t.runId) {
+      event(isActive(t) ? "on" : "off", "device", `${t.phase}:${t.reason};target=${t.targetMmHg};duration=${t.durationSeconds};run=${t.runId}`);
+    }
+  }
+  async function toggleTherapy() {
+    const d = driver.current;
+    if (!d || !connected) return;
+    const stop = isActive(lastTelemetry.current) || starting;
+    const generation = ++commandGeneration.current;
+    setError("");
+    if (stop) setStopping(true); else setStarting(true);
+    try {
+      if (stop) await d.stop();
+      else await d.start({ targetMmHg, durationSeconds });
+    } catch (e) {
+      if (commandGeneration.current === generation) setError((e as Error).message);
+    } finally {
+      if (commandGeneration.current === generation) { setStarting(false); setStopping(false); }
     }
   }
   async function finish() {
@@ -177,6 +212,7 @@ export default function App() {
         void driver.current?.disconnect();
         driver.current = null;
         setConnected(false);
+        clearTelemetry();
         event("unknown", "connection", "app_background");
         void finish();
       }
@@ -255,12 +291,14 @@ export default function App() {
     await driver.current?.disconnect();
     driver.current = null;
     setConnected(false);
+    clearTelemetry();
     event("unknown", "connection", "disconnected");
     await finish();
   }
   async function connect() {
     if (!user) return;
     interrupted.current = false;
+    clearTelemetry();
     const d = createBleDriver();
     driver.current = d;
     const session: Session = {
@@ -275,10 +313,12 @@ export default function App() {
     active.current = session;
     try {
       const id = await d.connect(
-        (s) => event(s, "device", "state_report"),
+        (t) => { if (driver.current === d && !interrupted.current) receiveTelemetry(t); },
         () => {
+          if (driver.current !== d) return;
           interrupted.current = true;
           setConnected(false);
+          clearTelemetry();
           event("unknown", "connection", "link_lost");
           void finish();
           driver.current = null;
@@ -296,12 +336,29 @@ export default function App() {
     } catch (e) {
       await d.disconnect();
       driver.current = null;
+      clearTelemetry();
       event("unknown", "connection", "connection_failed");
       await finish();
       throw e;
     }
   }
-  const deviceLabel = !connected ? "Not connected" : state === "on" ? "LED is on" : state === "off" ? "LED is off" : "Awaiting device state";
+  const therapyActive = isActive(therapy) || starting;
+  const settingsLocked = therapyActive || stopping;
+  const phaseLabels: Record<string, string> = {
+    idle: "Ready to start", pressurizing: "Building pressure", running: "Therapy in progress",
+    completed: "Therapy complete", stopped: "Session stopped", fault: "Device stopped · fault",
+  };
+  const reasonLabels: Record<string, string> = {
+    sensor_fault: "Sensor unavailable or invalid. Pump stopped; vent open.",
+    overpressure: "300 mmHg cutoff reached. Pump stopped; vent open.",
+    pressure_build_timeout: "Target range was not reached within 60 seconds. Pump stopped; vent open.",
+    heartbeat_timeout: "App heartbeat lost. Pump stopped; vent open.",
+    disconnected: "Bluetooth disconnected. Pump stopped; vent open.",
+    physical_stop: "Stopped using the physical STOP button.", app_stop: "Stopped from the app.",
+    completed: "The ESP32 completed the timer, stopped the pump and opened the vent.",
+  };
+  const deviceLabel = !connected ? "Not connected" : therapy ? phaseLabels[therapy.phase] : "Reading device…";
+  const countdown = therapy && (isActive(therapy) || therapy.timerStarted) ? therapy.remainingSeconds : durationSeconds;
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView
@@ -362,26 +419,45 @@ export default function App() {
                 </View>
               </View>
               <View style={styles.stateArea}>
-                <View style={[styles.stateRing, state === "on" && connected ? styles.stateRingOn : undefined]}>
-                  <View style={[styles.stateCore, state === "on" && connected ? styles.stateCoreOn : undefined]}>
-                    <Text style={styles.stateSymbol}>{!connected || state === "unknown" ? "—" : state === "on" ? "ON" : "OFF"}</Text>
-                  </View>
+                <Text style={styles.lightEyebrow}>CURRENT PRESSURE</Text>
+                <View style={styles.pressureLine}>
+                  <Text accessibilityLiveRegion="none" style={styles.pressureValue}>{connected && therapy?.pressureMmHg != null ? therapy.pressureMmHg.toFixed(1) : "—"}</Text>
+                  <Text style={styles.pressureUnit}>mmHg</Text>
                 </View>
                 <Text accessibilityLiveRegion="polite" style={styles.deviceState}>{deviceLabel}</Text>
-                <Text style={styles.deviceHint}>{connected ? "Live status reported by your ESP32" : "Keep your ESP32 nearby and Bluetooth enabled."}</Text>
+                <Text style={styles.deviceHint}>{!connected ? "Keep your ESP32 nearby and Bluetooth enabled." : `Target ${therapyActive && therapy ? therapy.targetMmHg : targetMmHg} mmHg · reported by your device`}</Text>
               </View>
-              <ActionButton title={busy && !connected ? "Please wait…" : connected ? "Disconnect device" : "Connect device"} variant="light" disabled={busy || !ready} onPress={() => void action(connected ? disconnect : connect)} />
-              <View style={styles.controlRow}>
-                <View style={styles.grow}><ActionButton title="Start LED" variant="light" disabled={busy || !connected || state === "unknown"} onPress={() => void action(async () => {
-                  const d = driver.current; if (!d) throw new Error("Connect your device first."); await d.command(true);
-                })} /></View>
-                <View style={styles.grow}><ActionButton title="Stop LED" variant="stop" disabled={!connected} onPress={() => void action(async () => {
-                  const d = driver.current; if (!d) throw new Error("Connect your device first."); await d.command(false);
-                })} /></View>
+              <View style={styles.timerPanel}>
+                <Text style={styles.lightEyebrow}>TIME REMAINING</Text>
+                <Text style={styles.timerValue}>{formatTime(countdown)}</Text>
+                <Text style={styles.deviceHint}>{therapy?.phase === "pressurizing" ? "Waiting for pressure to enter the ±25 mmHg range" : therapy?.phase === "running" ? "Countdown runs on your ESP32" : therapy?.phase === "completed" ? "Completed · pump off · vent open" : "Timer begins when target range is first reached"}</Text>
               </View>
+              {connected && therapy && reasonLabels[therapy.reason] && <Text accessibilityRole={therapy.phase === "fault" ? "alert" : undefined} style={styles.deviceHint}>{reasonLabels[therapy.reason]}</Text>}
+              <ActionButton
+                title={stopping ? "Stopping…" : therapyActive ? "STOP" : "Start"}
+                variant={therapyActive ? "stop" : "light"}
+                disabled={!connected || !ready || stopping || (!therapyActive && (busy || !therapy || therapy.pressureMmHg === null || therapy.pressureMmHg >= 300))}
+                onPress={() => void toggleTherapy()}
+              />
+              <ActionButton title={busy && !connected ? "Please wait…" : connected ? "Disconnect device" : "Connect device"} variant="device" disabled={busy || !ready || starting || stopping} onPress={() => void action(connected ? disconnect : connect)} />
             </View>
 
-            <View style={styles.note}><Text style={styles.noteText}>LED prototype · Keep the app in the foreground while connected.</Text></View>
+            <View style={styles.note}><Text style={styles.noteText}>Bench prototype · Keep the app in the foreground while connected.</Text></View>
+
+            <View style={styles.card}>
+              <Text style={styles.heading}>Therapy settings</Text>
+              <Text style={styles.body}>{settingsLocked ? "Settings are locked during a session." : "Choose the pressure and duration for your next session."}</Text>
+              <Text style={styles.label}>TARGET PRESSURE · mmHg</Text>
+              <View style={styles.optionGrid}>
+                {PRESSURES.map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`${value} millimeters of mercury`} accessibilityState={{ selected: value === targetMmHg, disabled: settingsLocked }} disabled={settingsLocked} onPress={() => setTargetMmHg(value)} style={[styles.option, value === targetMmHg && styles.optionSelected, settingsLocked && styles.optionDisabled]}><Text style={[styles.optionText, value === targetMmHg && styles.optionTextSelected]}>{value}</Text></Pressable>)}
+              </View>
+              <Text style={styles.caption}>The countdown begins on first reaching ±25 mmHg of the target. It continues if pressure later leaves that range.</Text>
+              <Text style={styles.label}>DURATION · MINUTES : SECONDS</Text>
+              <View style={styles.optionGrid}>
+                {DURATIONS.map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Duration ${formatTime(value)}`} accessibilityState={{ selected: value === durationSeconds, disabled: settingsLocked }} disabled={settingsLocked} onPress={() => setDurationSeconds(value)} style={[styles.option, value === durationSeconds && styles.optionSelected, settingsLocked && styles.optionDisabled]}><Text style={[styles.optionText, value === durationSeconds && styles.optionTextSelected]}>{formatTime(value)}</Text></Pressable>)}
+              </View>
+              <Text style={styles.caption}>Device shuts down and vents at 300 mmHg or on a sensor fault.</Text>
+            </View>
 
             <View style={styles.card}>
               <View style={styles.spread}>
@@ -421,16 +497,28 @@ type ActionButtonProps = {
   title: string;
   onPress: () => void;
   disabled?: boolean;
-  variant?: "primary" | "secondary" | "light" | "stop";
+  variant?: "primary" | "secondary" | "light" | "stop" | "device";
 };
 function ActionButton({ title, onPress, disabled = false, variant = "primary" }: ActionButtonProps) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, variant === "secondary" ? styles.buttonSecondary : variant === "light" ? styles.buttonLight : variant === "stop" ? styles.buttonStop : styles.buttonPrimary, disabled && styles.buttonDisabled, pressed && !disabled && styles.buttonPressed]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, variant === "secondary" ? styles.buttonSecondary : variant === "light" ? styles.buttonLight : variant === "stop" ? styles.buttonStop : variant === "device" ? styles.buttonDevice : styles.buttonPrimary, disabled && styles.buttonDisabled, pressed && !disabled && styles.buttonPressed]}>
     <Text style={[styles.buttonText, (variant === "secondary" || variant === "light") && styles.buttonTextDark, variant === "stop" && styles.buttonTextStop]}>{title}</Text>
   </Pressable>;
 }
 
 const styles = StyleSheet.create({
   keyboardArea: { flex: 1 },
+  pressureLine: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap", justifyContent: "center" },
+  pressureValue: { color: "#F2F4D1", fontSize: 56, fontWeight: "600", letterSpacing: -2, fontVariant: ["tabular-nums"] },
+  pressureUnit: { color: "#D3E3DA", fontSize: 17 },
+  timerPanel: { backgroundColor: "#22685B", borderRadius: 18, padding: 16, alignItems: "center", gap: 7 },
+  timerValue: { color: "#FFFFFF", fontSize: 42, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  option: { minWidth: 62, minHeight: 46, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#F0F3EB", borderWidth: 1, borderColor: "#D6E0D3" },
+  optionSelected: { backgroundColor: "#17685D", borderColor: "#17685D" },
+  optionDisabled: { opacity: 0.65 },
+  optionText: { fontSize: 15, fontWeight: "600", color: "#193F36", fontVariant: ["tabular-nums"] },
+  optionTextSelected: { color: "#FFFFFF" },
+  buttonDevice: { backgroundColor: "#2E6B60", borderWidth: 1, borderColor: "#548478" },
   screen: { flex: 1, backgroundColor: "#F5F5EF" },
   page: { padding: 22, paddingBottom: 36, gap: 18, width: "100%", maxWidth: 620, alignSelf: "center" },
   grow: { flex: 1, minWidth: 0 },
