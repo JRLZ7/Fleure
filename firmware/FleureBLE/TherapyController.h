@@ -10,7 +10,7 @@ enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
 // All times are unsigned milliseconds so elapsed-time subtraction survives millis() rollover.
 struct Controller {
   static constexpr uint32_t SensorMaxAgeMs = 250;
-  static constexpr uint32_t InflationTimeoutMs = 60000; // Bench default; validate for your pneumatic hardware.
+  static constexpr uint32_t InflationTimeoutMs = 120000; // Bench default; validate for your pneumatic hardware.
   static constexpr uint16_t StartTolerance = 25;
   static constexpr float CutoffMmHg = 300.0f;
   Phase phase = Phase::Idle;
