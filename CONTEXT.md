@@ -1,161 +1,199 @@
-# ESP32 Remote-Controlled Blood Pressure Cuff Project
+# Fleure: ESP32 pressure-control cuff project
 
-## 1. Project Overview
+Updated: October 26, 2026.
 
-You are working on an **ESP32-controlled pneumatic cuff system designed for Remote Ischemic Preconditioning (RIPC)**.
+This file describes the current source implementation and the latest user-reported hardware decisions. Implemented code, proposed circuit details and verified physical behavior are different categories. The source files and hardware measurements take precedence over older project summaries.
 
-The goal is to develop a device that can automatically inflate and deflate a blood pressure cuff using an ESP32 microcontroller, with the eventual ability to control the system remotely, monitor pressure, and transmit data to a mobile application and potentially healthcare providers.
+## 1. Purpose and current scope
 
-Unlike a traditional blood pressure monitor, which primarily measures blood pressure, your device is intended to **control cuff inflation and deflation for timed compression cycles**.
+Fleure is an ESP32-controlled pneumatic cuff prototype with a native patient app, BLE communication, an authenticated local API and a clinician web dashboard. The broader goal is Remote Ischemic Preconditioning (RIPC), but the current controller implements **one pressure-regulated timed hold followed by venting**, not a complete repeated ischemia/reperfusion protocol.
 
-The project combines:
+The earlier LED demo, browser simulator, L298N wiring and fixed 20-second inflate/20-second deflate test are superseded for this implementation. The patient app now uses hardware BLE only. Wi-Fi control and a deployed cloud service are not implemented.
 
-- **Hardware:** ESP32, air pump, solenoid valve, motor driver, pressure sensor, and blood pressure cuff.
-- **Firmware:** Arduino/C++ code to operate the pump and valve.
-- **Connectivity:** Bluetooth Low Energy (BLE) or Wi-Fi communication.
-- **Software:** A mobile application for remote control, monitoring, and data collection.
-- **Healthcare integration:** Potential storage and sharing of recorded measurements with clinicians.
+The configured pressure choices are project requirements, not validated treatment recommendations. Source-level tests do not establish safe human use, physical pressure accuracy or a guaranteed pressure ceiling. Independent pressure protection, reliable release, hardware validation and appropriate clinical review remain necessary before human testing.
 
-## 2. Hardware Components
+## 2. Current source layout
 
-| Component | Purpose | Current direction |
-|---|---|---|
-| ESP32 | Central microcontroller | Main controller |
-| L298N motor driver | Controls air pump motor | Selected and being tested |
-| WP-370B air pump | Inflates blood pressure cuff | Being tested |
-| 6V 3-way solenoid valve | Controls air release | Exploring valve operation and modifications |
-| Blood pressure cuff | Applies pressure to the limb | Standard inflatable cuff |
-| MPX5050 pressure sensor | Measures pneumatic pressure | Previously researched |
-| Qwiic MicroPressure sensor | Alternative pressure measurement | Previously compared |
-| Battery pack | Powers pump and electronics | 8 × 1.5V batteries investigated |
+| Repository path | Responsibility |
+| --- | --- |
+| apps/mobile/App.tsx | Patient login, device controls, settings, live pressure, remaining time, local queue and upload UI |
+| apps/mobile/src/protocol.ts | Protocol-v2 types, settings validation, command encoding and telemetry decoding |
+| apps/mobile/src/ble.ts | Native BLE connection, notifications/reads, command acknowledgements and heartbeat/freshness handling |
+| apps/mobile/src/ble.web.ts | Reports that Bluetooth requires an Android/iOS development build; no browser fallback |
+| apps/mobile/src/bluetoothReady.ts | Waits for Bluetooth readiness and reports permission/power problems |
+| firmware/FleureBLE/FleureBLE.ino | ESP32 GPIOs, buttons, sensor I²C, BLE transport and controller integration |
+| firmware/FleureBLE/TherapyController.h | Pressure regulation, timer state and shutdown rules; must remain beside the sketch |
+| apps/api | Express/TypeScript API, authentication and SQLite persistence |
+| apps/clinician | Existing React/Vite dashboard for uploaded assigned-patient sessions |
+| firmware/README.md | Current firmware wiring, behavior and detailed v2 byte layout |
+| docs/TESTING.md | Verification record and outstanding acceptance procedures |
 
-### Basic Pneumatic System
+Remove the obsolete mobile `src/simulator.ts` and migrate tests/imports that use its old interface. The current driver exposes `start(settings)` and `stop()`, replacing `command(on)`. Align any older `packages/protocol` documentation with v2 before relying on it.
 
-Conceptual layout (the valve connection depends on its port configuration):
+## 3. App settings and session behavior
 
-```text
-Air pump ─────┬──────── Blood pressure cuff
-              │
-              ├──────── Pressure sensor
-              │
-              └──────── Solenoid valve ─── Vent to atmosphere
-```
+| Requirement | Current implementation |
+| --- | --- |
+| Pressure units | Live gauge pressure in mmHg, displayed to one decimal place |
+| Pressure targets | 125, 150, 175, 200, 225, 250, 275 mmHg |
+| Default target | 200 mmHg |
+| Duration options | 2:00 through 6:00, every 30 seconds |
+| Default duration | 2:00 |
+| Start control | A single Start button becomes STOP while a start is pending and throughout an active run |
+| Settings changes | Sent to the board when Start is pressed; selectors lock during an active run |
+| Countdown start | First valid sample within target ±25 mmHg; inclusive endpoints, no dwell time, cutoff takes priority |
+| Later pressure deviations | Timer continues; pressure regulation stays active |
+| Countdown owner | ESP32; the phone displays reported remaining seconds rather than maintaining an independent countdown |
+| Normal completion | Pump off, vent open, Completed and 0:00; no automatic restart |
 
-You have also been investigating the internal structure of three-way solenoid valves, including modifying or 3D-printing a replacement cover while preserving the valve's normal functionality.
+A target of 275 mmHg has a nominal start band of 250–300 mmHg, but **300 mmHg triggers shutdown**, not timer start or continued operation.
 
-## 3. ESP32 Firmware and Control
+The patient interface has a teal/cream design, pressure and timer panels, setting selectors, upload/history controls and recent activity. It uses React Native's built-in SafeAreaView. The attempted `react-native-safe-area-context` change was reverted following a missing native-component error.
 
-The current firmware work focuses on basic pump and valve operation rather than a complete automated RIPC protocol.
+Keyboard handling uses keyboard events, extra scroll padding, measurement of the focused field, and Next/Done navigation. This replaced the initial KeyboardAvoidingView-only approach. Actual phone/layout behavior still needs device testing.
 
-Your most recent requested testing cycle was:
+Backgrounding disconnects BLE and ends the local connection session. Live telemetry is cleared on connection loss; the app cannot independently prove physical output state after losing contact. There is no automatic reconnect, therapy resume or simulator mode.
 
-1. **Inflation — 20 seconds:** Pump ON.
-2. **Deflation — 20 seconds:** Pump OFF, vent open.
-3. Repeat as needed for hardware testing.
+## 4. Firmware regulation and shutdown
 
-Your current implementation preferences include:
+The firmware uses `digitalWrite()` on active-HIGH driver inputs. It does not use PWM, variable-speed control or PID.
 
-- Using the L298N motor driver with ESP32 GPIO pins.
-- Controlling the motor with basic `digitalWrite()` commands.
-- Avoiding PWM and variable-speed control for now.
-- Using the Random Nerd Tutorials ESP32/L298N wiring and control approach as a reference.
-- Adding solenoid valve control for inflation and deflation.
+- Close the vent before turning the pump on.
+- Pump toward the selected target; turn the pump off at target while keeping the vent closed.
+- Refill when pressure falls below target minus 25 mmHg.
+- Vent when pressure exceeds target plus 25 mmHg, keeping the pump off until pressure returns to target.
+- Start the countdown on first entry into the initial band. Once started, it continues through subsequent pressure changes unless stopped/faulted.
+- At zero, command pump off and vent open. A later normal STOP/disconnect preserves the completed result.
+- Reject duplicate START during an active run; do not reset the active countdown.
 
-This timing-based approach is useful for testing component functionality, but it does not regulate the actual pressure in the cuff.
+This is hysteretic regulation intended to control pressure near the target. Actual constancy, overshoot and release time have not been established by hardware measurements.
 
-## 4. Current ESP32 Pin Configuration
+| Condition | Implemented response |
+| --- | --- |
+| Measured pressure ≥300 mmHg | Fault; pump off, vent open |
+| Invalid/missing pressure or sensor status fault | Sensor fault; pump off, vent open |
+| Pressure reading older than 250 ms | Sensor fault; pump off, vent open |
+| Initial start band not reached within 60 seconds | Build-timeout fault; pump off, vent open |
+| Physical red STOP or app STOP | Stop and vent |
+| Established BLE disconnect | Stop and vent, including a physically started run |
+| Remote heartbeat absent for more than five seconds | Stop and vent a remotely started run |
+| Countdown complete | Completed, zero remaining time, pump off, vent open |
+| Boot/reset | Initialize pump off and vent open; never automatically start |
 
-Based on the latest discussed code and hardware setup:
+The 60-second pressure-build timeout is an additional configurable bench default in TherapyController.h. It is separate from the user-selected duration. Cutoff uses the unsmoothed pressure measurement. Faults do not automatically restart; a new START requires fresh valid pressure below the cutoff and must pass physical-stop checks.
 
-| Connection | ESP32 GPIO | Function |
-|---|---|---|
-| L298N IN1 | GPIO 27 | Pump motor control |
-| L298N IN2 | GPIO 26 | Pump motor control |
-| L298N ENA | Jumper installed | Motor channel enabled |
-| Solenoid MOSFET | GPIO 21 | Solenoid control |
-| Pressure sensor | Not finalized | Pressure readings |
+Green physical START uses the last accepted board settings, initially 200 mmHg / 2:00. A new app selection alone does not configure physical START. Physical-only runs do not require app heartbeats, but still use sensing, regulation, countdown and fault handling. Red STOP takes priority; physical green must be released/re-pressed after a stop condition.
 
-Intended control logic:
+## 5. GPIOs, power and sensor
 
-| System state | IN1 | IN2 | Solenoid |
-|---|---|---|---|
-| Inflation | LOW | HIGH | Energized |
-| Deflation | LOW | LOW | De-energized |
+| Connection | ESP32 connection | Current firmware assumption |
+| --- | --- | --- |
+| Physical START button | GPIO 18 to GND | INPUT_PULLUP, active LOW |
+| Physical STOP button | GPIO 19 to GND | INPUT_PULLUP, active LOW |
+| Pump transistor control | GPIO 25 | HIGH runs pump; LOW stops pump |
+| Valve transistor control | GPIO 26 | HIGH energizes/closes vent; LOW opens vent |
+| Pressure SDA | GPIO 21 | I²C data |
+| Pressure SCL | GPIO 22 | I²C clock |
+| Sensor supply | 3V3 and GND | 3.3 V sensor power; common ground |
+| ESP32 bench power | USB | Pump/valve load power is external |
 
-**Note:** This assumes energizing the solenoid closes the exhaust and de-energizing it vents the cuff. Verify the behavior with the specific valve before use.
+These are the pressure-control sketch's assignments. Earlier GPIO 27/26 L298N and GPIO 21 valve mappings are obsolete. A separate user-shared manual GPIO test sketch is not the integrated pressure/BLE controller.
 
-## 5. Long-Term RIPC Functionality
+The selected sensor is **Honeywell MPRLS0300YG00001BB**, a 0–300 mmHg gauge-pressure breakout using I²C address 0x18 and transfer function B. The code uses that calibration directly, not a generic 25 PSI/transfer-A configuration, and does not subtract atmospheric pressure.
 
-The broader project aims to automate a clinician-prescribed sequence of ischemia and reperfusion:
+The sketch requests conversions approximately every 20 ms, waits at least 5 ms before checking completion, has a 25 ms busy-conversion timeout and bounds I²C transactions to 20 ms. Slight negative gauge-zero readings are clamped to zero; automatic zero calibration under pressure is not implemented.
 
-1. Inflate the cuff until the prescribed target pressure is reached.
-2. Maintain the target pressure for the prescribed ischemic interval.
-3. Open the exhaust valve and completely release cuff pressure.
-4. Maintain the deflated state for the prescribed reperfusion interval.
-5. Repeat for the prescribed number of cycles.
-6. Record pressure measurements, timing, and session outcomes.
+The wiring guide proposes 10 kΩ pull-ups from SDA and SCL to 3V3 and a 100 nF bypass capacitor at the sensor, subject to checking what is already on the breakout. EOC is unused because the code polls status. RES is optional according to breakout documentation. Sensor-chip pad numbers must not be assumed to match breakout-header positions.
 
-The pressure sensor is essential because the system must know when it has reached the desired pressure and whether pressure remains stable.
+## 6. Latest transistor and supply decisions
 
-**Safety:** The current 20-second inflation/20-second deflation program is a hardware test, not a clinically appropriate RIPC protocol. Human testing requires appropriate pressure feedback, automatic pressure release, independent overpressure protection, and clinical oversight.
+The user is **not using an L298N**. Separate transistor switches are intended for the pump and solenoid.
 
-## 6. Mobile App and Cloud Architecture
+| Item | Confirmed report or unresolved detail |
+| --- | --- |
+| Supply arrangement | User reports a 12 V supply, with no series resistor in the pump's positive supply path |
+| Solenoid branch | User explicitly confirmed a **100 Ω resistor in series with the coil** |
+| Transistor marking | User wrote **IZLZ44N**; whether this is **IRLZ44N** remains unconfirmed |
+| Pump model | Earlier notes mention WP-370B; current rated voltage, running/stall current and exact model have not been supplied |
+| Valve rating | Earlier notes describe a 6 V three-way valve; present rated voltage/current have not been confirmed |
+| Coil resistor rating | 100 Ω is known; wattage and thermal suitability are unknown |
+| Gate resistors | 330 Ω per gate and 10 kΩ gate-to-source pull-downs were proposed; installation is unconfirmed |
+| Flyback protection | One correctly rated diode across each load was proposed; actual diode parts/installation are unconfirmed |
 
-You have discussed an architecture that allows patients to operate the cuff remotely and clinicians to access resulting data:
+The proposed low-side N-channel MOSFET arrangement connects load negative to Drain, Source to common ground, and Gate to the GPIO through its gate resistor. The pump's positive lead connects to +12 V only if the pump is suitably rated; its negative must remain switched if the ESP32 is to stop it.
 
-```text
-ESP32 + Cuff
-   │
-   │ Bluetooth Low Energy (BLE)
-   ▼
-Mobile Application
-   │
-   │ HTTPS / authenticated API
-   ▼
-Cloud Backend
-   │
-   │ Authenticated access
-   ▼
-Clinician Portal
-```
+For the stated solenoid branch, +12 V passes through the 100 Ω resistor to coil positive; coil negative connects to the valve MOSFET Drain. This records the user's arrangement, **not confirmation that it is electrically suitable**. The series resistor is not a gate resistor and does not provide a fixed regulated voltage. At 60 mA, for example, it drops 6 V and dissipates 0.36 W; that is a calculation example, not an established coil operating point.
 
-- **ESP32 + cuff:** Motor, valve, and pressure sensing.
-- **Mobile app:** Session controls, live monitoring, and history.
-- **Cloud backend:** Secure storage, device and user records.
-- **Clinician portal:** Review patient sessions and measurements.
+The proposed flyback diode goes across the coil itself: cathode/stripe at coil positive **after** the series resistor, anode at coil negative/Drain. Pump diode cathode is at pump positive; anode at pump negative/Drain. Diode ratings and actual valve release time require verification.
 
-You were leaning toward BLE for ESP32-to-phone communication and an authenticated backend for storing data. You also explored ways to prevent a compromised or malicious mobile client from modifying measurements before they reach the server.
+If the parts are confirmed IRLZ44N in TO-220, with printed face toward the viewer and legs down: pin 1/left Gate, pin 2/middle Drain, pin 3/right Source; metal tab is Drain. Its datasheet specifies on-resistance at 4 V, 5 V and 10 V gate drive, not 3.3 V. Direct ESP32 drive therefore remains unverified for these loads; a suitable gate driver or lower-voltage-specified MOSFET may be needed.
 
-The ESP32 itself should remain responsible for safety-critical pump and valve operation, regardless of connection status.
+Join ESP32 GND, sensor GND, transistor Sources and external supply negatives. GPIOs must not supply pump/valve load current. The actual valve must vent when unpowered. Missing transistor, load and resistor ratings must be resolved before treating the wiring PDF as a finalized circuit.
 
-## 7. Design Requirements
+## 7. BLE protocol v2
 
-| Requirement | Target |
-|---|---|
-| Portability | Under 1 lb total |
-| Lifespan | More than 1 year |
-| Accessibility | One-handed operation |
-| Fit | Adjustable adult-arm sizing |
-| Comfort | Comparable to standard cuffs |
-| Pressure accuracy | ±5% design target |
-| Safety | Emergency release and overpressure protection |
-| Automation | Minimal patient intervention |
+The advertised name is Fleure-Pump. Service/characteristic UUIDs are retained, but START and STATE are incompatible with the earlier one-byte protocol.
 
-## 8. Current Progress and Next Steps
+| Function | UUID / format |
+| --- | --- |
+| Service | b498a000-8a8a-4b27-a8c5-9d0a214c1000 |
+| COMMAND | b498a001-8a8a-4b27-a8c5-9d0a214c1000 |
+| STATE | b498a002-8a8a-4b27-a8c5-9d0a214c1000 |
+| START | Seven bytes: opcode 1, target uint16, duration-seconds uint16, request-ID uint16 |
+| STOP | Three bytes: opcode 0, request-ID uint16 |
+| Heartbeat | One byte: opcode 2 |
+| Legacy commands | One-byte STOP accepted; one-byte START rejected |
 
-| Workstream | Status | Details |
-|---|---|---|
-| Hardware selection and architecture | Explored | ESP32, L298N, pump, valve, and cuff identified. |
-| Basic pump control | In progress | Digital GPIO control without PWM; hardware testing underway. |
-| Solenoid valve operation | In progress | Control logic and replacement housing design being investigated. |
-| Pressure sensor integration | Pending | MPX5050 and Qwiic options researched; closed-loop control not yet established. |
-| Safety and RIPC control | Pending | Pressure limits, holding control, fault handling, and repeated cycles still need implementation. |
-| BLE, app, and backend | Planned | Architecture discussed, but device communication is not yet implemented. |
+Multi-byte values are little-endian. STATE is 20 bytes: version, phase, reason, flags, pressure in tenths of mmHg or invalid sentinel, target, remaining seconds, configured duration, run ID, acknowledged request ID, result and advancing uint8 frame counter. See firmware/README.md for byte offsets.
 
-## Overall Summary
+Phases are idle, pressurizing, running, completed, stopped and fault. Telemetry normally publishes about every 200 ms, plus phase/command changes. The phone sends heartbeat/read polls about every second. It waits for the matching acknowledgement, imposes a three-second command deadline and disconnects if telemetry stops advancing for more than three seconds. A readable frozen GATT value is not fresh data.
 
-You are developing a **portable, low-cost, ESP32-powered RIPC cuff that automatically controls inflation, pressure maintenance, and deflation**, with the eventual goal of supporting home use and remote clinical monitoring.
+BLE pairing, authorization of nearby clients, device provisioning and a device-selection UI are not implemented. The app connects to the first matching advertiser. Run IDs are board-local and reset on reboot, not globally unique device attestations.
 
-Your immediate focus is getting the pump and solenoid valve operating reliably using an ESP32 and L298N motor driver without PWM.
+## 8. API, clinician dashboard and persistence
 
-The next major technical milestone is integrating a pressure sensor so the system can transition from simple time-based inflation to **closed-loop, pressure-regulated control with reliable fail-safe deflation**.
+The existing Node.js API uses Express, Zod, scrypt password hashes, bearer tokens and Node's built-in SQLite. server.ts reads process environment values; direct startup must explicitly load/export configuration. No production identity service or cloud deployment is provisioned.
+
+| Seeded account | Role/access |
+| --- | --- |
+| patient@fleure.local | Own sessions |
+| clinician@fleure.local | Assigned Demo Patient's sessions |
+| other@fleure.local | Own sessions; unassigned to the clinician |
+
+On first startup with an empty users table, DEMO_PASSWORD must be at least 12 characters and is used to seed all three accounts. Changing it after the database exists does not reset passwords. There is no registration/reset flow. A different DATABASE_PATH creates a separate fresh database without deleting the old one. Patient-app tokens remain in memory; restarting requires login.
+
+Pending sessions/events are saved in AsyncStorage and uploaded explicitly with Sync & refresh history. Phase/reason/run changes are recorded with target and duration in event reason text. Pressure samples and countdown samples are **live display only**, not stored as a backend time series or pressure chart.
+
+A local/API session represents one BLE connection and can contain several timed therapy runs. Completion does not close that connection session; disconnect/backgrounding does. Legacy event state `on` means an active run, not that the pump GPIO stayed HIGH throughout regulation.
+
+The clinician dashboard reviews uploaded data for assigned patients and requires refresh; it is not a live pressure stream. It was not redesigned during the pressure update. Stable UUIDs support upload retry deduplication. Old queued simulator records remain supported by the unchanged API schema, although the current app cannot generate new simulator runs. Records are phone-reported, not cryptographically attested by the board.
+
+## 9. Verification and build evidence
+
+Targeted pressure-update checks passed for strict frontend TypeScript, all 63 target/duration combinations, timer boundaries/rollover, regulation and faults, host-compiled sketch integration with mocked GPIO/I²C/BLE, firmware-to-app decoding, delayed command acknowledgement, STOP/freshness handling and mocked-native app interactions. Keyboard scroll-space logic was included.
+
+The assistant did not compile/flash with a physical ESP32 toolchain or perform actual phone/BLE/pneumatic tests. The user subsequently supplied this Arduino compile summary; the exact source/build environment was not provided:
+
+| Reported allocation | Used | Reported maximum |
+| --- | --- | --- |
+| Program storage | 1,120,799 bytes (85%) | 1,310,720 bytes |
+| Global/static RAM | 42,820 bytes (13%) | 327,680 bytes |
+
+This leaves 189,921 bytes in that application partition and 284,860 bytes before additional runtime RAM allocations. It does not imply variables are omitted, nor does it prove runtime heap stability or functional hardware behavior.
+
+Full-repository API/clinician checks, native builds, firmware flashing, sensor calibration, pressure traces, overshoot, transistor temperatures and physical stop/vent timing still need recorded evidence. Historical LED/simulator tests and old dependency-audit counts are not current pressure-system acceptance results. See docs/TESTING.md for the current procedures.
+
+## 10. Retained goals and next work
+
+Earlier design goals remain aspirations: under 1 lb total weight, more than one year lifespan, one-handed operation, adjustable adult-arm fit, suitable comfort, a ±5% pressure-accuracy target, emergency release and minimal intervention. None is established as achieved by the source changes.
+
+Next priorities:
+
+1. Confirm transistor marking, load voltage/current ratings, pump stall current, 100 Ω resistor wattage and actual driver/diode installation.
+2. Verify valve port behavior, power-off venting, independent pressure protection and safe startup GPIO levels on a bench fixture.
+3. Validate pressure-sensor wiring/calibration and physical pressure response across the selectable settings, including overshoot and release.
+4. Complete native BLE, interruption, repeated-session and runtime-memory tests; record the exact hardware/software versions.
+5. Rerun repository checks after integrating matching v2 app/firmware and removing obsolete simulator dependencies.
+6. Design persistent pressure-history storage, authenticated device identity and any multi-cycle RIPC behavior as separate future work with explicit requirements and validation.
+
+Do not restore earlier L298N pins, LED labels, fixed 20-second cycles or simulator fallback based on the old CONTEXT.md. Preserve the current pressure/timer requirements unless the user explicitly changes them.
