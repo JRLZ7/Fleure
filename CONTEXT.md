@@ -41,12 +41,12 @@ Remove the obsolete mobile `src/simulator.ts` and migrate tests/imports that use
 | Default duration | 2:00 |
 | Start control | A single Start button becomes STOP while a start is pending and throughout an active run |
 | Settings changes | Sent to the board when Start is pressed; selectors lock during an active run |
-| Countdown start | First valid sample within target ±25 mmHg; inclusive endpoints, no dwell time, cutoff takes priority |
+| Countdown start | First valid sample within target ±5 mmHg; inclusive endpoints, no dwell time, cutoff takes priority |
 | Later pressure deviations | Timer continues; pressure regulation stays active |
 | Countdown owner | ESP32; the phone displays reported remaining seconds rather than maintaining an independent countdown |
 | Normal completion | Pump off, vent open, Completed and 0:00; no automatic restart |
 
-A target of 275 mmHg has a nominal start band of 250–300 mmHg, but **300 mmHg triggers shutdown**, not timer start or continued operation.
+A target of 275 mmHg has a timer-start band of 270–280 mmHg. **300 mmHg still triggers shutdown**, not continued operation.
 
 The patient interface has a teal/cream design, pressure and timer panels, setting selectors, upload/history controls and recent activity. It uses React Native's built-in SafeAreaView. The attempted `react-native-safe-area-context` change was reverted following a missing native-component error.
 
@@ -60,7 +60,7 @@ The firmware uses `digitalWrite()` on active-HIGH driver inputs. It does not use
 
 - Close the vent before turning the pump on.
 - Pump toward the selected target; turn the pump off at target while keeping the vent closed.
-- Refill when pressure falls below target minus 25 mmHg.
+- Refill when pressure falls below target minus 5 mmHg.
 - Keep the valve closed during an active run, including pressure above target; stop the pump instead of venting to regulate pressure. Completion, STOP and fault handling still open the vent.
 - Start the countdown on first entry into the initial band. Once started, it continues through subsequent pressure changes unless stopped/faulted.
 - At zero, command pump off and vent open. A later normal STOP/disconnect preserves the completed result.

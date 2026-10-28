@@ -18,6 +18,10 @@ int main() {
     for (uint16_t duration = 120; duration <= 360; duration += 30) {
       Controller c;
       begin(c, target, duration);
+      sampleAt(c, target - 6, 1);
+      assert(!c.timerStarted && c.pump && c.ventClosed);
+      sampleAt(c, target - 5, 2);
+      assert(c.timerStarted && c.pump && c.ventClosed);
       sampleAt(c, target, 10);
       assert(c.timerStarted && !c.pump && c.ventClosed);
       const uint32_t countdownAt = c.countdownAt;
@@ -25,9 +29,9 @@ int main() {
       sampleAt(c, target < 275 ? target + 26 : 299, 20);
       assert(c.active() && !c.pump && c.ventClosed);
       assert(c.countdownAt == countdownAt);
-      sampleAt(c, target - 25, 30);
+      sampleAt(c, target - 5, 30);
       assert(!c.pump && c.ventClosed);
-      sampleAt(c, target - 26, 40);
+      sampleAt(c, target - 6, 40);
       assert(c.pump && c.ventClosed);
       sampleAt(c, target - 1, 50);
       assert(c.pump && c.ventClosed);
@@ -37,6 +41,13 @@ int main() {
       sampleAt(c, target, countdownAt + uint32_t(duration) * 1000);
       assert(c.phase == Phase::Completed && c.remainingMs == 0);
       assert(!c.pump && !c.ventClosed);
+
+      Controller above;
+      above.sample(target + 6, 0);
+      assert(above.start(target, duration, 0) == Result::Accepted);
+      assert(!above.timerStarted && !above.pump && above.ventClosed);
+      sampleAt(above, target + 5, 1);
+      assert(above.timerStarted && !above.pump && above.ventClosed);
     }
   }
   for (Reason reason : {Reason::PhysicalStop, Reason::AppStop, Reason::Disconnect, Reason::Heartbeat}) {

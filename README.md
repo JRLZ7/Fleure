@@ -10,7 +10,7 @@ This is a bench prototype. The pressure choices are implementation settings, not
 | --- | --- |
 | Target pressure | 125–275 mmHg in 25 mmHg steps; default 200 mmHg |
 | Duration | 2:00–6:00 in 30-second steps; default 2:00 |
-| Timer start | First valid pressure sample within target ±25 mmHg; no dwell time |
+| Timer start | First valid pressure sample within target ±5 mmHg; no dwell time |
 | Later pressure deviations | Countdown continues; pressure regulation remains active |
 | App control | One Start button becomes STOP while start is pending and during an active run |
 | Settings during a run | Locked |
@@ -19,7 +19,7 @@ This is a bench prototype. The pressure choices are implementation settings, not
 | Sensor fault | Invalid/missing data or stale readings stop pump and open vent |
 | Pressure-build timeout | 60 seconds without reaching the initial band; configurable bench default |
 
-The ESP32 owns regulation, timing and outputs. The app displays device reports rather than running its own countdown. Regulation uses on/off hysteresis, not PWM or PID: pump toward target, stop at or above target, and refill below target minus 25 mmHg. The valve stays closed during an active run; overshoot below the 300 mmHg fault cutoff is not actively vented. Actual pressure stability is not guaranteed by software tests.
+The ESP32 owns regulation, timing and outputs. The app displays device reports rather than running its own countdown. Regulation uses on/off hysteresis, not PWM or PID: pump toward target, stop at or above target, and refill below target minus 5 mmHg. The valve stays closed during an active run; overshoot below the 300 mmHg fault cutoff is not actively vented. Actual pressure stability is not guaranteed by software tests.
 
 The 300 mmHg cutoff takes priority over the timer-start band. For a target of 275 mmHg, a 300 mmHg reading is a fault even though it is on the upper edge of that band.
 
@@ -97,7 +97,7 @@ The browser can render the login and interface, but **cannot connect or run ther
 2. Sign in with the patient account and the configured API address.
 3. Connect to `Fleure-Pump`. A fresh, valid pressure reading is required before Start.
 4. Choose pressure and duration, then press Start. Settings are sent when Start is pressed, not when a selector is tapped.
-5. The ESP32 builds pressure. Its countdown begins on first entry into the ±25 mmHg band and continues until completion unless stopped or faulted.
+5. The ESP32 builds pressure. Its countdown begins on first entry into the ±5 mmHg band and continues until completion unless stopped or faulted.
 6. Use STOP or the physical red button to end early. At normal completion, confirm pump off, vent open and Completed / 0:00 in the app.
 7. Press **Sync & refresh history** to upload queued events and refresh history.
 8. On the clinician dashboard, sign in as the clinician, choose Demo Patient and refresh uploaded data.

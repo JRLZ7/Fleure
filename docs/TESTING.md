@@ -101,13 +101,13 @@ Use a bench fixture and independent reference measurement. Where precise thresho
 | Power on/reset | Pump LOW, valve LOW/vent open; no automatic run; sensor sampled before START is accepted |
 | Sensor absent/unreadable at startup | Fault/invalid pressure; START refused; pump off and vent open |
 | Valid START below initial band | Pressurizing; countdown holds at selected full duration |
-| Target 200; first valid sample reaches 175 mmHg | Countdown starts immediately; no dwell required |
-| Target 200; initial sample at 225 mmHg | Eligible to begin countdown; endpoint is inclusive |
+| Target 200; first valid sample reaches 195 mmHg | Countdown starts immediately; no dwell required |
+| Target 200; initial sample at 205 mmHg | Eligible to begin countdown; endpoint is inclusive |
 | Initial pressure outside band but below cutoff | Countdown waits; controller regulates toward target |
 | Pressure leaves band after timing begins | Countdown continues without pause/reset; regulation remains active |
 | Pump reaches target | Pump command turns off with vent closed |
-| Pressure falls below target minus 25 | Pump refills toward target |
-| Pressure exceeds target plus 25, below cutoff | Pump off; valve stays closed; no active pressure release during regulation |
+| Pressure falls below target minus 5 | Pump refills toward target |
+| Pressure exceeds target plus 5, below cutoff | Pump off; valve stays closed; no active pressure release during regulation |
 | Measured pressure reaches 300 or higher | Fault immediately commands pump off and vent open; cutoff takes priority over timer-start band |
 | Target 275; sample at 300 | Overpressure fault, not timer start/continuation |
 | Sensor integrity/math error, communication failure or invalid reading | Sensor fault; pump off and vent open; pressure invalid rather than a stale live value |

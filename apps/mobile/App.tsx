@@ -430,7 +430,7 @@ export default function App() {
               <View style={styles.timerPanel}>
                 <Text style={styles.lightEyebrow}>TIME REMAINING</Text>
                 <Text style={styles.timerValue}>{formatTime(countdown)}</Text>
-                <Text style={styles.deviceHint}>{therapy?.phase === "pressurizing" ? "Waiting for pressure to enter the ±25 mmHg range" : therapy?.phase === "running" ? "Countdown runs on your ESP32" : therapy?.phase === "completed" ? "Completed · pump off · vent open" : "Timer begins when target range is first reached"}</Text>
+                <Text style={styles.deviceHint}>{therapy?.phase === "pressurizing" ? "Waiting for pressure to enter the ±5 mmHg range" : therapy?.phase === "running" ? "Countdown runs on your ESP32" : therapy?.phase === "completed" ? "Completed · pump off · vent open" : "Timer begins when target range is first reached"}</Text>
               </View>
               {connected && therapy && reasonLabels[therapy.reason] && <Text accessibilityRole={therapy.phase === "fault" ? "alert" : undefined} style={styles.deviceHint}>{reasonLabels[therapy.reason]}</Text>}
               <ActionButton
@@ -451,7 +451,7 @@ export default function App() {
               <View style={styles.optionGrid}>
                 {PRESSURES.map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`${value} millimeters of mercury`} accessibilityState={{ selected: value === targetMmHg, disabled: settingsLocked }} disabled={settingsLocked} onPress={() => setTargetMmHg(value)} style={[styles.option, value === targetMmHg && styles.optionSelected, settingsLocked && styles.optionDisabled]}><Text style={[styles.optionText, value === targetMmHg && styles.optionTextSelected]}>{value}</Text></Pressable>)}
               </View>
-              <Text style={styles.caption}>The countdown begins on first reaching ±25 mmHg of the target. It continues if pressure later leaves that range.</Text>
+              <Text style={styles.caption}>The countdown begins on first reaching ±5 mmHg of the target. It continues if pressure later leaves that range.</Text>
               <Text style={styles.label}>DURATION · MINUTES : SECONDS</Text>
               <View style={styles.optionGrid}>
                 {DURATIONS.map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Duration ${formatTime(value)}`} accessibilityState={{ selected: value === durationSeconds, disabled: settingsLocked }} disabled={settingsLocked} onPress={() => setDurationSeconds(value)} style={[styles.option, value === durationSeconds && styles.optionSelected, settingsLocked && styles.optionDisabled]}><Text style={[styles.optionText, value === durationSeconds && styles.optionTextSelected]}>{formatTime(value)}</Text></Pressable>)}

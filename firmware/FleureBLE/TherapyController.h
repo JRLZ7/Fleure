@@ -11,7 +11,7 @@ enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
 struct Controller {
   static constexpr uint32_t SensorMaxAgeMs = 250;
   static constexpr uint32_t InflationTimeoutMs = 120000; // Bench default; validate for your pneumatic hardware.
-  static constexpr uint16_t StartTolerance = 25;
+  static constexpr uint16_t StartTolerance = 5;
   static constexpr float CutoffMmHg = 300.0f;
   Phase phase = Phase::Idle;
   Reason reason = Reason::None;
@@ -69,7 +69,7 @@ struct Controller {
       fail(Reason::InflationTimeout); return;
     }
     // Regulate using only the pump; keep the vent closed throughout an active run.
-    // Stop at/above target and refill below target-25. Overshoot is not actively
+    // Stop at/above target and refill below target-5. Overshoot is not actively
     // vented here; completion, STOP and fault paths above still release pressure.
     ventClosed = true;
     if (pressure >= target) pump = false;
