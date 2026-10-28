@@ -19,7 +19,7 @@ This is a bench prototype. The pressure choices are implementation settings, not
 | Sensor fault | Invalid/missing data or stale readings stop pump and open vent |
 | Pressure-build timeout | 60 seconds without reaching the initial band; configurable bench default |
 
-The ESP32 owns regulation, timing and outputs. The app displays device reports rather than running its own countdown. Regulation uses on/off hysteresis, not PWM or PID: pump toward target, refill below target minus 25 mmHg, and vent above target plus 25 mmHg until pressure returns to target. Actual pressure stability is not guaranteed by software tests.
+The ESP32 owns regulation, timing and outputs. The app displays device reports rather than running its own countdown. Regulation uses on/off hysteresis, not PWM or PID: pump toward target, stop at or above target, and refill below target minus 25 mmHg. The valve stays closed during an active run; overshoot below the 300 mmHg fault cutoff is not actively vented. Actual pressure stability is not guaranteed by software tests.
 
 The 300 mmHg cutoff takes priority over the timer-start band. For a target of 275 mmHg, a 300 mmHg reading is a fault even though it is on the upper edge of that band.
 

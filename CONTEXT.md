@@ -61,7 +61,7 @@ The firmware uses `digitalWrite()` on active-HIGH driver inputs. It does not use
 - Close the vent before turning the pump on.
 - Pump toward the selected target; turn the pump off at target while keeping the vent closed.
 - Refill when pressure falls below target minus 25 mmHg.
-- Vent when pressure exceeds target plus 25 mmHg, keeping the pump off until pressure returns to target.
+- Keep the valve closed during an active run, including pressure above target; stop the pump instead of venting to regulate pressure. Completion, STOP and fault handling still open the vent.
 - Start the countdown on first entry into the initial band. Once started, it continues through subsequent pressure changes unless stopped/faulted.
 - At zero, command pump off and vent open. A later normal STOP/disconnect preserves the completed result.
 - Reject duplicate START during an active run; do not reset the active countdown.

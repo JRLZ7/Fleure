@@ -25,6 +25,17 @@ The original documents reported checks of the earlier LED/simulator system. Thos
 
 ## Repository integration checks to run
 
+The pump-only regulation regression test can be run on a host with a C++ compiler:
+
+```sh
+c++ -std=c++11 -Wall -Wextra -Werror firmware/test/controller_test.cpp -o /tmp/fleure-controller-test
+/tmp/fleure-controller-test
+```
+
+It covers all 63 target/duration combinations, holding the valve closed above
+target, pump refill hysteresis, timer completion, and stop/fault release paths.
+It tests commanded outputs only, not physical pressure retention or overshoot.
+
 From the repository root, using its lockfile and actual npm scripts:
 
 ```sh
@@ -96,7 +107,7 @@ Use a bench fixture and independent reference measurement. Where precise thresho
 | Pressure leaves band after timing begins | Countdown continues without pause/reset; regulation remains active |
 | Pump reaches target | Pump command turns off with vent closed |
 | Pressure falls below target minus 25 | Pump refills toward target |
-| Pressure exceeds target plus 25, below cutoff | Pump off; vent opens until pressure returns to target |
+| Pressure exceeds target plus 25, below cutoff | Pump off; valve stays closed; no active pressure release during regulation |
 | Measured pressure reaches 300 or higher | Fault immediately commands pump off and vent open; cutoff takes priority over timer-start band |
 | Target 275; sample at 300 | Overpressure fault, not timer start/continuation |
 | Sensor integrity/math error, communication failure or invalid reading | Sensor fault; pump off and vent open; pressure invalid rather than a stale live value |

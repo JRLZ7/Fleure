@@ -68,15 +68,12 @@ struct Controller {
     } else if (uint32_t(now - startedAt) >= InflationTimeoutMs) {
       fail(Reason::InflationTimeout); return;
     }
-    // Hysteretic regulation with the existing on/off pump and normally-open vent.
-    // Pump toward target; refill below target-25. Vent above target+25 until back at target.
-    if (pressure > target + StartTolerance) { pump = false; ventClosed = false; }
-    else if (!ventClosed && pressure > target) { pump = false; }
-    else {
-      ventClosed = true;
-      if (pressure >= target) pump = false;
-      else if (pressure < target - StartTolerance) pump = true;
-    }
+    // Regulate using only the pump; keep the vent closed throughout an active run.
+    // Stop at/above target and refill below target-25. Overshoot is not actively
+    // vented here; completion, STOP and fault paths above still release pressure.
+    ventClosed = true;
+    if (pressure >= target) pump = false;
+    else if (pressure < target - StartTolerance) pump = true;
   }
   uint16_t remainingSeconds() const { return uint16_t((remainingMs + 999) / 1000); }
 };

@@ -56,7 +56,7 @@ The cutoff uses the unsmoothed measurement at **300 mmHg or above**. This equals
 
 An accepted START requires valid settings and a fresh pressure sample below 300 mmHg. It enters **Pressurizing**. The first sample in the start band immediately begins **Running**; there is no dwell requirement. Once started, the countdown does not pause if pressure leaves the band. A duplicate START during an active run is rejected without resetting its timer.
 
-Regulation uses hysteresis: stop pumping at target, refill below target minus 25, and vent above target plus 25 until pressure returns to target. It is not PWM/PID and cannot establish exact constancy without hardware tests. The cutoff overrides regulation and timer-start eligibility: at a 275 mmHg target, 300 mmHg is a fault.
+Regulation uses hysteresis: stop pumping at or above target and refill below target minus 25. Keep the valve closed throughout an active run; pressure above target is not actively vented unless the 300 mmHg fault cutoff is reached. It is not PWM/PID and cannot establish exact constancy without hardware tests. The cutoff overrides regulation and timer-start eligibility: at a 275 mmHg target, 300 mmHg is a fault.
 
 At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff and must pass the physical-stop checks.
 
