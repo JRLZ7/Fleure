@@ -79,7 +79,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
     const auto* b = reinterpret_cast<const uint8_t*>(value.c_str());
     portENTER_CRITICAL(&mux);
     // v2 START includes settings + request ID. Reject legacy one-byte START.
-    if ((value.length() == 7 || value.length() == 8) && b[0] == 1 && !pendingStop && connected && !lostLink) {
+    if ((value.length() == 7 || (value.length() == 8 && b[7] == 1)) && b[0] == 1 && !pendingStop && connected && !lostLink) {
       requestedTarget = read16(b + 1); requestedDuration = read16(b + 3); startRequest = read16(b + 5); pendingStart = true;
       requestedAutomated = value.length() == 8 && b[7] == 1;
     } else if ((value.length() == 3 || value.length() == 1) && b[0] == 0) {
@@ -117,14 +117,15 @@ void pollPressure(uint32_t now) {
   const float pressure = (float(raw) - 419430.4f) * 300.0f / 3355443.2f;
   if (raw == 0 || raw == 0xFFFFFF) therapy.sensorFailure();
   else {
-    if (therapy.mode == Mode::AutomatedRipc && therapy.systolic == 0) {
+    if (therapy.phase == Phase::EstimatingSystolic && therapy.mode == Mode::AutomatedRipc) {
       systolicEstimator.sample(pressure);
       if (systolicEstimator.ready(pressure)) {
         uint16_t systolic;
-        if (!systolicEstimator.estimate(systolic)) { therapy.fail(Reason::Sensor); }
-        else {
-          therapy.systolic = systolic;
-          therapy.target = uint16_t(fminf(275.0f, fmaxf(200.0f, float(systolic) + 50.0f)));
+        // Never use a guessed systolic value for pressure control.
+        // Estimation failure must immediately stop the pump and open the vent.
+        if (!systolicEstimator.estimate(systolic) ||
+            !therapy.acceptSystolic(systolic, millis())) {
+          therapy.fail(Reason::Sensor);
         }
       }
     }

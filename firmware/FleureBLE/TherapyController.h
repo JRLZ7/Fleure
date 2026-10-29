@@ -3,7 +3,14 @@
 #include <math.h>
 
 namespace fleure {
-enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fault };
+// Keep existing numeric phase IDs unchanged for BLE protocol compatibility.
+enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fault, EstimatingSystolic };
+
+// Experimental automatic targeting is disabled until pressure and waveform
+// validation are complete. Opt in ONLY for controlled bench testing.
+#ifndef FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION
+#define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 0
+#endif
 enum class Reason : uint8_t { None, Sensor, Overpressure, InflationTimeout, Heartbeat, Disconnect, PhysicalStop, AppStop, Complete };
 enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
 enum class Mode : uint8_t { Manual, AutomatedRipc };
@@ -23,7 +30,7 @@ struct Controller {
   bool pressureValid = false, timerStarted = false, pump = false, ventClosed = false;
   uint32_t lastSample = 0, startedAt = 0, countdownAt = 0, runId = 0, remainingMs = 120000;
 
-  bool active() const { return phase == Phase::Pressurizing || phase == Phase::Running; }
+  bool active() const { return phase == Phase::EstimatingSystolic || phase == Phase::Pressurizing || phase == Phase::Running; }
   static bool settingsValid(uint16_t p, uint16_t seconds) {
     return p >= 125 && p <= 275 && (p - 125) % 25 == 0 &&
            seconds >= 120 && seconds <= 360 && (seconds - 120) % 30 == 0;
@@ -53,18 +60,32 @@ struct Controller {
     return Result::Accepted;
   }
   Result startAutomated(uint16_t seconds, uint32_t now) {
+if (!FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION) return Result::Unsafe;
     if (!settingsValid(200, seconds)) return Result::InvalidSettings;
     if (active()) return Result::Busy;
     if (!pressureValid || uint32_t(now - lastSample) > SensorMaxAgeMs || pressure >= CutoffMmHg)
       return Result::Unsafe;
     target = 200; duration = seconds; mode = Mode::AutomatedRipc; systolic = 0;
     remainingMs = uint32_t(seconds) * 1000;
-    startedAt = now; timerStarted = false; phase = Phase::Pressurizing; reason = Reason::None;
+    startedAt = now; timerStarted = false; phase = Phase::EstimatingSystolic; reason = Reason::None;
     pump = false; ventClosed = true; ++runId;
     tick(now);
     return Result::Accepted;
   }
-  void stop(Reason why) {
+  // The timer cannot begin until a validated estimate has been accepted.
+bool acceptSystolic(uint16_t value, uint32_t now) {
+  if (!FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION ||
+      mode != Mode::AutomatedRipc || phase != Phase::EstimatingSystolic ||
+      value < 80 || value > 240) return false;
+  const uint16_t proposed = uint16_t(value) + 50;
+  target = proposed < 200 ? 200 : (proposed > 275 ? 275 : proposed);
+  systolic = value;
+  phase = Phase::Pressurizing;
+  tick(now);
+  return true;
+}
+
+void stop(Reason why) {
     pump = false; ventClosed = false;
     // Preserve faults and successful completion when subsequent disconnect/STOP arrives.
     if (phase != Phase::Fault && phase != Phase::Completed) { phase = Phase::Stopped; reason = why; }
@@ -74,7 +95,7 @@ struct Controller {
     if (!active()) { pump = false; ventClosed = false; return; }
     if (!pressureValid) { fail(Reason::Sensor); return; }
     if (pressure >= CutoffMmHg) { fail(Reason::Overpressure); return; }
-    if (!timerStarted && pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
+    if (phase == Phase::Pressurizing && !timerStarted && pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
       timerStarted = true; countdownAt = now; phase = Phase::Running;
     }
     if (timerStarted) {
