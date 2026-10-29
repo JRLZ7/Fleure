@@ -1,6 +1,6 @@
 # Fleure ESP32 pressure-control firmware
 
-`FleureBLE/FleureBLE.ino` and `FleureBLE/TherapyController.h` implement pressure sensing, on/off pump/vent regulation, a device-owned countdown and BLE protocol v2. The device advertises as **Fleure-Pump**.
+`FleureBLE/FleureBLE.ino`, `FleureBLE/TherapyController.h` and `FleureBLE/SystolicEstimator.h` implement pressure sensing, on/off pump/vent regulation, a device-owned countdown and BLE protocol v2. The device advertises as **Fleure-Pump**.
 
 This replaces the earlier LED and pump-only sketches. The service/characteristic UUIDs remain the same, but **the START payload and state format have changed**. Flash this firmware together with the matching pressure-update app.
 
@@ -60,7 +60,7 @@ Regulation uses hysteresis: stop pumping at or above target and refill below tar
 
 At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff and must pass the physical-stop checks.
 
-The 60-second build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This implements one timed hold, not a repeated ischemia/reperfusion cycle sequence.
+The 60-second build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. The app's **Automated RIPC therapy** command and the physical green START button use the automated path. That path samples the MPRLS waveform during inflation, estimates systolic pressure using a smoothed pulse envelope, and selects `max(200, systolic + 50)` mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
 
 ## Buttons, remote control and stop conditions
 
@@ -83,7 +83,8 @@ Use `apps/mobile/src/protocol.ts` as the matching application implementation. Mu
 
 | Command | Payload |
 | --- | --- |
-| START | 7 bytes: opcode 1, target uint16, duration-seconds uint16, request-ID uint16 |
+| START manual | 7 bytes: opcode 1, target uint16, duration-seconds uint16, request-ID uint16 |
+| START automated | 8 bytes: manual START fields plus mode byte `1` |
 | STOP | 3 bytes: opcode 0, request-ID uint16 |
 | Heartbeat | One byte: opcode 2 |
 | Legacy STOP | One byte: opcode 0; still accepted |

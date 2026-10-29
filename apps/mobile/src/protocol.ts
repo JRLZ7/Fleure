@@ -51,10 +51,11 @@ export function decodeTelemetry(bytes: Uint8Array): Telemetry {
     remainingSeconds: remaining, runId: v.getUint32(12, true), requestId: v.getUint16(16, true), result: bytes[18], frameCounter: bytes[19],
   };
 }
-export function encodeStart(s: TherapySettings, requestId: number): Uint8Array {
+export function encodeStart(s: TherapySettings, requestId: number, automated = false): Uint8Array {
   validateSettings(s);
-  const b = new Uint8Array(7), v = new DataView(b.buffer);
+  const b = new Uint8Array(automated ? 8 : 7), v = new DataView(b.buffer);
   b[0] = 1; v.setUint16(1, s.targetMmHg, true); v.setUint16(3, s.durationSeconds, true); v.setUint16(5, requestId, true);
+  if (automated) b[7] = 1;
   return b;
 }
 export function encodeStop(requestId: number): Uint8Array {
@@ -62,7 +63,7 @@ export function encodeStop(requestId: number): Uint8Array {
 }
 export interface Driver {
   connect(onTelemetry: (t: Telemetry) => void, onDisconnect: () => void): Promise<string>;
-  start(settings: TherapySettings): Promise<void>;
+  start(settings: TherapySettings, automated?: boolean): Promise<void>;
   stop(): Promise<void>;
   disconnect(): Promise<void>;
 }

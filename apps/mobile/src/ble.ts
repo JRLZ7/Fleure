@@ -133,8 +133,8 @@ export function createBleDriver(): Driver {
         return device.id;
       } catch (e) { await close(); throw e; }
     },
-    async start(settings: TherapySettings) {
-      const id = requestId(); await request(encodeStart(settings, id), id);
+    async start(settings: TherapySettings, automated = false) {
+      const id = requestId(); await request(encodeStart(settings, id, automated), id);
     },
     async stop() {
       const id = requestId(); await request(encodeStop(id), id);

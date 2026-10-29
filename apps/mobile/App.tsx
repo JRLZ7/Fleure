@@ -156,7 +156,7 @@ export default function App() {
       event(isActive(t) ? "on" : "off", "device", `${t.phase}:${t.reason};target=${t.targetMmHg};duration=${t.durationSeconds};run=${t.runId}`);
     }
   }
-  async function toggleTherapy() {
+  async function toggleTherapy(automated = false) {
     const d = driver.current;
     if (!d || !connected) return;
     const stop = isActive(lastTelemetry.current) || starting;
@@ -165,7 +165,7 @@ export default function App() {
     if (stop) setStopping(true); else setStarting(true);
     try {
       if (stop) await d.stop();
-      else await d.start({ targetMmHg, durationSeconds });
+      else await d.start({ targetMmHg, durationSeconds }, automated);
     } catch (e) {
       if (commandGeneration.current === generation) setError((e as Error).message);
     } finally {
@@ -439,6 +439,12 @@ export default function App() {
                 disabled={!connected || !ready || stopping || (!therapyActive && (busy || !therapy || therapy.pressureMmHg === null || therapy.pressureMmHg >= 300))}
                 onPress={() => void toggleTherapy()}
               />
+              {!therapyActive && <ActionButton
+                title="Automated RIPC therapy"
+                variant="primary"
+                disabled={!connected || !ready || stopping || busy || !therapy || therapy.pressureMmHg === null || therapy.pressureMmHg >= 300}
+                onPress={() => void toggleTherapy(true)}
+              />}
               <ActionButton title={busy && !connected ? "Please wait…" : connected ? "Disconnect device" : "Connect device"} variant="device" disabled={busy || !ready || starting || stopping} onPress={() => void action(connected ? disconnect : connect)} />
             </View>
 

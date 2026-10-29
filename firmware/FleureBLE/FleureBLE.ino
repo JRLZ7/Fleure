@@ -8,6 +8,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include "TherapyController.h"
+#include "SystolicEstimator.h"
 using namespace fleure;
 
 const int greenButton = 18, redButton = 19, pumpPin = 25, solenoidPin = 26;
@@ -22,6 +23,8 @@ portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 bool connected = false, pendingStart = false, pendingStop = false, lostLink = false, heartbeat = false;
 bool remoteOn = false, mustReleaseGreen = false, wireReady = false;
 uint16_t requestedTarget = 200, requestedDuration = 120, startRequest = 0, stopRequest = 0;
+bool requestedAutomated = false;
+SystolicEstimator systolicEstimator;
 uint16_t ackRequest = 0;
 Result ackResult = Result::None;
 uint32_t lastHeartbeat = 0;
@@ -76,8 +79,9 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
     const auto* b = reinterpret_cast<const uint8_t*>(value.c_str());
     portENTER_CRITICAL(&mux);
     // v2 START includes settings + request ID. Reject legacy one-byte START.
-    if (value.length() == 7 && b[0] == 1 && !pendingStop && connected && !lostLink) {
+    if ((value.length() == 7 || value.length() == 8) && b[0] == 1 && !pendingStop && connected && !lostLink) {
       requestedTarget = read16(b + 1); requestedDuration = read16(b + 3); startRequest = read16(b + 5); pendingStart = true;
+      requestedAutomated = value.length() == 8 && b[7] == 1;
     } else if ((value.length() == 3 || value.length() == 1) && b[0] == 0) {
       stopRequest = value.length() == 3 ? read16(b + 1) : 0; pendingStop = true; pendingStart = false;
     } else if (value.length() == 1 && b[0] == 2) heartbeat = true;
@@ -112,7 +116,20 @@ void pollPressure(uint32_t now) {
   // Do not use the common 25 PSI/transfer-A library defaults or subtract atmospheric pressure.
   const float pressure = (float(raw) - 419430.4f) * 300.0f / 3355443.2f;
   if (raw == 0 || raw == 0xFFFFFF) therapy.sensorFailure();
-  else therapy.sample(pressure, millis());
+  else {
+    if (therapy.mode == Mode::AutomatedRipc && therapy.systolic == 0) {
+      systolicEstimator.sample(pressure);
+      if (systolicEstimator.ready(pressure)) {
+        uint16_t systolic;
+        if (!systolicEstimator.estimate(systolic)) { therapy.fail(Reason::Sensor); }
+        else {
+          therapy.systolic = systolic;
+          therapy.target = uint16_t(fminf(275.0f, fmaxf(200.0f, float(systolic) + 50.0f)));
+        }
+      }
+    }
+    therapy.sample(pressure, millis());
+  }
 }
 void setup() {
   Serial.begin(115200);
@@ -137,10 +154,10 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   bool greenPress = green.press(now); red.press(now);
-  bool start, stop, lost, hb, link; uint16_t p, seconds, startId, stopId;
+  bool start, stop, lost, hb, link, automated; uint16_t p, seconds, startId, stopId;
   portENTER_CRITICAL(&mux);
   start = pendingStart; stop = pendingStop; lost = lostLink; hb = heartbeat; link = connected;
-  p = requestedTarget; seconds = requestedDuration; startId = startRequest; stopId = stopRequest;
+  p = requestedTarget; seconds = requestedDuration; automated = requestedAutomated; startId = startRequest; stopId = stopRequest;
   pendingStart = pendingStop = lostLink = heartbeat = false;
   portEXIT_CRITICAL(&mux);
   if (hb) lastHeartbeat = now;
@@ -155,10 +172,14 @@ void loop() {
   } else {
     if (green.stable == HIGH && digitalRead(greenButton) == HIGH) mustReleaseGreen = false;
     if (start && link) {
-      ackRequest = startId; ackResult = therapy.start(p, seconds, now);
+      ackRequest = startId; ackResult = automated ? therapy.startAutomated(seconds, now) : therapy.start(p, seconds, now);
+      if (ackResult == Result::Accepted && automated) systolicEstimator.reset();
       if (ackResult == Result::Accepted) { remoteOn = true; lastHeartbeat = now; }
     } else if (greenPress && !mustReleaseGreen) {
-      if (therapy.start(therapy.target, therapy.duration, now) == Result::Accepted) remoteOn = false;
+      if (therapy.startAutomated(therapy.duration, now) == Result::Accepted) {
+        systolicEstimator.reset();
+        remoteOn = false;
+      }
     }
   }
   applyOutputs();

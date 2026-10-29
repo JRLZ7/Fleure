@@ -2,7 +2,7 @@
 
 This document covers the hardware-only pressure app and matching ESP32 protocol-v2 firmware. The old browser simulator and LED acceptance matrix no longer describe current behavior.
 
-The source implements one pressure-regulated timed hold. It is not a validated treatment protocol or a completed multi-cycle RIPC controller. Perform physical testing on a bench fixture with independent pressure measurement and protection, not on a person.
+The source implements one pressure-regulated timed hold. Automated RIPC adds on-device systolic estimation and a systolic-derived target; it is not a validated blood-pressure measurement or completed multi-cycle clinical RIPC controller. Perform physical testing on a bench fixture with independent pressure measurement and protection, not on a person.
 
 ## Verification status
 
@@ -35,6 +35,13 @@ c++ -std=c++11 -Wall -Wextra -Werror firmware/test/controller_test.cpp -o /tmp/f
 It covers all 63 target/duration combinations, holding the valve closed above
 target, pump refill hysteresis, timer completion, and stop/fault release paths.
 It tests commanded outputs only, not physical pressure retention or overshoot.
+
+The automated estimator regression check can be run with:
+
+```sh
+c++ -std=c++11 -Wall -Wextra -Werror firmware/test/estimator_test.cpp -o /tmp/fleure-estimator-test
+/tmp/fleure-estimator-test
+```
 
 From the repository root, using its lockfile and actual npm scripts:
 

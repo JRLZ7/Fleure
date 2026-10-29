@@ -6,6 +6,7 @@ namespace fleure {
 enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fault };
 enum class Reason : uint8_t { None, Sensor, Overpressure, InflationTimeout, Heartbeat, Disconnect, PhysicalStop, AppStop, Complete };
 enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
+enum class Mode : uint8_t { Manual, AutomatedRipc };
 
 // All times are unsigned milliseconds so elapsed-time subtraction survives millis() rollover.
 struct Controller {
@@ -16,6 +17,8 @@ struct Controller {
   Phase phase = Phase::Idle;
   Reason reason = Reason::None;
   uint16_t target = 200, duration = 120;
+  uint16_t systolic = 0;
+  Mode mode = Mode::Manual;
   float pressure = 0;
   bool pressureValid = false, timerStarted = false, pump = false, ventClosed = false;
   uint32_t lastSample = 0, startedAt = 0, countdownAt = 0, runId = 0, remainingMs = 120000;
@@ -42,7 +45,20 @@ struct Controller {
     if (active()) return Result::Busy; // Duplicate START must never reset a running timer.
     if (!pressureValid || uint32_t(now - lastSample) > SensorMaxAgeMs || pressure >= CutoffMmHg)
       return Result::Unsafe;
-    target = requestedTarget; duration = seconds; remainingMs = uint32_t(seconds) * 1000;
+    target = requestedTarget; duration = seconds; mode = Mode::Manual; systolic = 0;
+    remainingMs = uint32_t(seconds) * 1000;
+    startedAt = now; timerStarted = false; phase = Phase::Pressurizing; reason = Reason::None;
+    pump = false; ventClosed = true; ++runId;
+    tick(now);
+    return Result::Accepted;
+  }
+  Result startAutomated(uint16_t seconds, uint32_t now) {
+    if (!settingsValid(200, seconds)) return Result::InvalidSettings;
+    if (active()) return Result::Busy;
+    if (!pressureValid || uint32_t(now - lastSample) > SensorMaxAgeMs || pressure >= CutoffMmHg)
+      return Result::Unsafe;
+    target = 200; duration = seconds; mode = Mode::AutomatedRipc; systolic = 0;
+    remainingMs = uint32_t(seconds) * 1000;
     startedAt = now; timerStarted = false; phase = Phase::Pressurizing; reason = Reason::None;
     pump = false; ventClosed = true; ++runId;
     tick(now);
