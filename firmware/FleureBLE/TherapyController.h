@@ -73,17 +73,33 @@ if (!FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION) return Result::Unsafe;
     return Result::Accepted;
   }
   // The timer cannot begin until a validated estimate has been accepted.
+
 bool acceptSystolic(uint16_t value, uint32_t now) {
   if (!FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION ||
-      mode != Mode::AutomatedRipc || phase != Phase::EstimatingSystolic ||
-      value < 80 || value > 240) return false;
+      mode != Mode::AutomatedRipc ||
+      phase != Phase::EstimatingSystolic ||
+      !pressureValid ||
+      uint32_t(now - lastSample) > SensorMaxAgeMs ||
+      !isfinite(pressure) ||
+      pressure >= CutoffMmHg ||
+      value < 80 ||
+      value > 240) {
+    return false;
+  }
+
   const uint16_t proposed = uint16_t(value) + 50;
-  target = proposed < 200 ? 200 : (proposed > 275 ? 275 : proposed);
+
+  target = proposed < 200 ? 200 :
+           proposed > 275 ? 275 : proposed;
+
   systolic = value;
   phase = Phase::Pressurizing;
+
   tick(now);
-  return true;
+
+  return phase != Phase::Fault;
 }
+
 
 void stop(Reason why) {
     pump = false; ventClosed = false;

@@ -115,22 +115,45 @@ void pollPressure(uint32_t now) {
   // MPRLS0300YG00001BB: 0..300 mmHg GAUGE, transfer B = 2.5%..22.5% of 2^24.
   // Do not use the common 25 PSI/transfer-A library defaults or subtract atmospheric pressure.
   const float pressure = (float(raw) - 419430.4f) * 300.0f / 3355443.2f;
-  if (raw == 0 || raw == 0xFFFFFF) therapy.sensorFailure();
-  else {
-    if (therapy.phase == Phase::EstimatingSystolic && therapy.mode == Mode::AutomatedRipc) {
-      systolicEstimator.sample(pressure);
-      if (systolicEstimator.ready(pressure)) {
-        uint16_t systolic;
-        // Never use a guessed systolic value for pressure control.
-        // Estimation failure must immediately stop the pump and open the vent.
-        if (!systolicEstimator.estimate(systolic) ||
-            !therapy.acceptSystolic(systolic, millis())) {
-          therapy.fail(Reason::Sensor);
-        }
-      }
+ 
+if (raw == 0 || raw == 0xFFFFFF) {
+  therapy.sensorFailure();
+  applyOutputs();
+  return;
+}
+
+// First validate the measured pressure against the safety cutoff.
+const uint32_t sampleTime = millis();
+therapy.sample(pressure, sampleTime);
+
+// A fault must stop actuation before any estimation or
+// target changes can occur.
+if (therapy.phase == Phase::Fault) {
+  applyOutputs();
+  return;
+}
+
+// Only process estimates during active estimation.
+if (therapy.phase == Phase::EstimatingSystolic &&
+    therapy.mode == Mode::AutomatedRipc) {
+
+  systolicEstimator.sample(pressure);
+
+  if (systolicEstimator.ready(pressure)) {
+    uint16_t systolic = 0;
+
+    if (!systolicEstimator.estimate(systolic) ||
+        !therapy.acceptSystolic(systolic, sampleTime)) {
+      therapy.fail(Reason::Sensor);
+      applyOutputs();
+      return;
     }
-    therapy.sample(pressure, millis());
   }
+}
+
+// Apply the controller's latest state.
+therapy.tick(sampleTime);
+applyOutputs();
 }
 void setup() {
   Serial.begin(115200);
