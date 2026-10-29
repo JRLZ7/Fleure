@@ -4,7 +4,7 @@ export const STATE = "b498a002-8a8a-4b27-a8c5-9d0a214c1000";
 export const PRESSURES = [125, 150, 175, 200, 225, 250, 275] as const;
 export const DURATIONS = [120, 150, 180, 210, 240, 270, 300, 330, 360] as const;
 export type DeviceState = "on" | "off" | "unknown";
-export const PHASES = ["idle", "pressurizing", "running", "completed", "stopped", "fault"] as const;
+export const PHASES = ["idle", "pressurizing", "running", "completed", "stopped", "fault", "estimating_systolic"] as const;
 export const REASONS = ["none", "sensor_fault", "overpressure", "pressure_build_timeout", "heartbeat_timeout", "disconnected", "physical_stop", "app_stop", "completed"] as const;
 export type TherapyPhase = typeof PHASES[number];
 export type TherapySettings = { targetMmHg: number; durationSeconds: number };
@@ -22,7 +22,7 @@ export type Telemetry = TherapySettings & {
   frameCounter: number;
 };
 export function isActive(t: Telemetry | null): boolean {
-  return t?.phase === "pressurizing" || t?.phase === "running";
+  return t?.phase === "pressurizing" || t?.phase === "running" || t?.phase === "estimating_systolic";
 }
 export function validateSettings(s: TherapySettings): void {
   if (!(PRESSURES as readonly number[]).includes(s.targetMmHg) || !(DURATIONS as readonly number[]).includes(s.durationSeconds))
@@ -40,7 +40,12 @@ export function decodeTelemetry(bytes: Uint8Array): Telemetry {
   if (!phase || !reason || (flags & 0xF0) !== 0 || bytes[18] > 4)
     throw new Error("Invalid device telemetry.");
   const settings = { targetMmHg: v.getUint16(6, true), durationSeconds: v.getUint16(10, true) };
-  validateSettings(settings);
+  // Manual START options are discrete; telemetry may contain any computed
+  // integer target in the firmware-supported range (e.g. 215 mmHg).
+  // Keep the existing discrete duration validation for both modes.
+  if (!Number.isInteger(settings.targetMmHg) || settings.targetMmHg < 125 || settings.targetMmHg > 275 ||
+      !(DURATIONS as readonly number[]).includes(settings.durationSeconds))
+    throw new Error("Invalid device telemetry settings.");
   const pressure = v.getUint16(4, true), remaining = v.getUint16(8, true);
   if (remaining > settings.durationSeconds || Boolean(flags & 1) === (pressure === 0xFFFF) || (phase === "completed" && remaining !== 0))
     throw new Error("Invalid device telemetry values.");

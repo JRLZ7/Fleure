@@ -38,6 +38,19 @@ struct SystolicEstimator {
 
   bool estimate(uint16_t& systolic) const {
     if (count < 100) return false;
+    // Reject an inflation ramp without measurable alternating pressure
+    // variations. This gate is deliberately only a sanity check, NOT a
+    // clinically validated systolic estimator.
+    unsigned reversals = 0;
+    int previousDirection = 0;
+    for (uint16_t i = 1; i < count; ++i) {
+      const float delta = pressures[i] - pressures[i - 1];
+      const int direction = delta > 0.08f ? 1 : delta < -0.08f ? -1 : 0;
+      if (direction == 0) continue;
+      if (previousDirection != 0 && direction != previousDirection) ++reversals;
+      previousDirection = direction;
+    }
+    if (reversals < 8) return false;
     float maximum = 0;
     for (uint16_t i = 20; i < count; ++i)
       if (envelopes[i] > maximum) maximum = envelopes[i];
