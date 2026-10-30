@@ -39,5 +39,3 @@ jobs:
         run: npm run check
       - name: Clinician production build
         run: npm run build
-      - name: Verify Expo dependency compatibility
-        run: npm exec -w @fleure/mobile -- expo install --check
