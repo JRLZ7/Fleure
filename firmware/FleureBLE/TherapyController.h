@@ -31,6 +31,15 @@ struct Controller {
   uint32_t lastSample = 0, startedAt = 0, countdownAt = 0, runId = 0, remainingMs = 120000;
 
   bool active() const { return phase == Phase::EstimatingSystolic || phase == Phase::Pressurizing || phase == Phase::Running; }
+  static bool automationSupported() { return FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION != 0; }
+  uint8_t telemetryFlags() const {
+    return (pressureValid ? 1 : 0) | (timerStarted ? 2 : 0) |
+           (pump ? 4 : 0) | (ventClosed ? 8 : 0) |
+           (automationSupported() ? 16 : 0) | (mode == Mode::AutomatedRipc ? 32 : 0);
+  }
+  Result startPhysical(uint32_t now) {
+    return automationSupported() ? startAutomated(duration, now) : start(target, duration, now);
+  }
   static bool settingsValid(uint16_t p, uint16_t seconds) {
     return p >= 125 && p <= 275 && (p - 125) % 25 == 0 &&
            seconds >= 120 && seconds <= 360 && (seconds - 120) % 30 == 0;

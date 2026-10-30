@@ -124,6 +124,19 @@ static void testEstimationTimeout() {
 }
 
 int main() {
+  {
+    Controller physical;
+    assert(physical.automationSupported());
+    assert((physical.telemetryFlags() & 16) != 0);
+    assert((physical.telemetryFlags() & 32) == 0);
+    physical.sample(0, 0);
+    assert(physical.startPhysical(0) == Result::Accepted);
+    assert(physical.phase == Phase::EstimatingSystolic);
+    assert(physical.mode == Mode::AutomatedRipc);
+    assert((physical.telemetryFlags() & (16 | 32)) == (16 | 32));
+    physical.stop(Reason::PhysicalStop);
+    assert(!physical.pump && !physical.ventClosed);
+  }
   testCountdownDoesNotStartDuringEstimation();
   testStopDuringEstimation();
   testPressureFault();

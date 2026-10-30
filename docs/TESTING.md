@@ -171,4 +171,14 @@ These are acceptance procedures to execute in the integrated repository. The pre
 
 ## Release record
 
+Integration regressions are covered by the committed host and protocol tests:
+
+- Default physical START runs manually and reuses last accepted manual settings; disabled automation still refuses automated START.
+- Opt-in physical START enters estimation and advertises its capability/run-mode flags. No test enables automation in the default firmware build.
+- Legacy/default telemetry hides automation; enabled firmware advertises it before a run starts.
+- A computed target such as 215 mmHg, or an automated preset target, does not replace the manual selection after reconnection. Manual START encoding remains valid; automated START ignores the manual target and still validates duration.
+- All phases have app labels, including estimation; estimation is active so STOP remains available.
+
+Run `npm test` and compile/run each `firmware/test/*_test.cpp` with C++11. On the phone/bench, confirm the default build's physical button starts a manual run, automation is hidden, and reconnection does not change manual targets to non-preset values. Opt-in builds require separate controlled bench verification; these tests do not validate systolic estimation or physical actuation.
+
 Mark each procedure with date, tester, source version, measured result and evidence. Keep failed/blocked cases visible. Do not describe a native build, firmware upload, real BLE run or pressure test as passed until performed on the actual equipment.

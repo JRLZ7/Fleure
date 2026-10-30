@@ -57,8 +57,7 @@ void publish(uint32_t now, bool force = false) {
   lastPublish = now; previousPhase = therapy.phase;
   // Protocol v2: exactly 20 bytes, fitting the default BLE notification payload.
   uint8_t b[20] = {2, uint8_t(therapy.phase), uint8_t(therapy.reason), 0};
-  b[3] = (therapy.pressureValid ? 1 : 0) | (therapy.timerStarted ? 2 : 0) |
-         (therapy.pump ? 4 : 0) | (therapy.ventClosed ? 8 : 0);
+  b[3] = therapy.telemetryFlags();
   const uint16_t p = therapy.pressureValid ? uint16_t(fminf(6553.4f, therapy.pressure) * 10 + 0.5f) : 0xFFFF;
   put16(b + 4, p); put16(b + 6, therapy.target); put16(b + 8, therapy.remainingSeconds()); put16(b + 10, therapy.duration);
   for (int i = 0; i < 4; ++i) b[12 + i] = uint8_t(therapy.runId >> (8 * i));
@@ -200,8 +199,8 @@ void loop() {
       if (ackResult == Result::Accepted && automated) systolicEstimator.reset();
       if (ackResult == Result::Accepted) { remoteOn = true; lastHeartbeat = now; }
     } else if (greenPress && !mustReleaseGreen) {
-      if (therapy.startAutomated(therapy.duration, now) == Result::Accepted) {
-        systolicEstimator.reset();
+      if (therapy.startPhysical(now) == Result::Accepted) {
+        if (therapy.mode == Mode::AutomatedRipc) systolicEstimator.reset();
         remoteOn = false;
       }
     }

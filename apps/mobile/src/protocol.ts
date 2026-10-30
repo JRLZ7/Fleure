@@ -31,6 +31,15 @@ export const REASONS = [
 ] as const;
 
 export type TherapyPhase = typeof PHASES[number];
+export const PHASE_LABELS: Record<TherapyPhase, string> = {
+  idle: "Ready to start",
+  pressurizing: "Building pressure",
+  running: "Therapy in progress",
+  completed: "Therapy complete",
+  stopped: "Session stopped",
+  fault: "Device stopped · fault",
+  estimating_systolic: "Estimating systolic pressure",
+};
 export type TherapySettings = {
   targetMmHg: number;
   durationSeconds: number;
@@ -48,7 +57,22 @@ export type Telemetry = TherapySettings & {
   requestId: number;
   result: number;
   frameCounter: number;
+  automationSupported: boolean;
+  automatedRun: boolean;
 };
+
+export function supportsAutomation(t: Telemetry | null): boolean {
+  return t?.automationSupported === true;
+}
+
+// Computed/legacy non-preset targets are observations, not manual selections.
+export function manualSettingsForTelemetry(current: TherapySettings, t: Telemetry): TherapySettings {
+  return {
+    targetMmHg: !t.automatedRun && (PRESSURES as readonly number[]).includes(t.targetMmHg)
+      ? t.targetMmHg : current.targetMmHg,
+    durationSeconds: t.durationSeconds,
+  };
+}
 
 export function isActive(t: Telemetry | null): boolean {
   return t?.phase === "estimating_systolic"
@@ -105,7 +129,7 @@ export function decodeTelemetry(bytes: Uint8Array): Telemetry {
   if (
     !phase
     || !reason
-    || (flags & 0xF0) !== 0
+    || (flags & 0xC0) !== 0
     || bytes[18] > 4
   ) {
     throw new Error("Invalid device telemetry.");
@@ -143,6 +167,8 @@ export function decodeTelemetry(bytes: Uint8Array): Telemetry {
     requestId: v.getUint16(16, true),
     result: bytes[18],
     frameCounter: bytes[19],
+    automationSupported: Boolean(flags & 16),
+    automatedRun: Boolean(flags & 32),
   };
 }
 
@@ -151,14 +177,17 @@ export function encodeStart(
   requestId: number,
   automated = false
 ): Uint8Array {
-  validateSettings(s);
+  // Automated targeting ignores the manual pressure selection. Send a valid
+  // placeholder and validate the duration without coupling the two modes.
+  const settings = automated ? { ...s, targetMmHg: 200 } : s;
+  validateSettings(settings);
 
   const b = new Uint8Array(automated ? 8 : 7);
   const v = new DataView(b.buffer);
 
   b[0] = 1;
-  v.setUint16(1, s.targetMmHg, true);
-  v.setUint16(3, s.durationSeconds, true);
+  v.setUint16(1, settings.targetMmHg, true);
+  v.setUint16(3, settings.durationSeconds, true);
   v.setUint16(5, requestId, true);
 
   if (automated) b[7] = 1;

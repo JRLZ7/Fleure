@@ -60,7 +60,7 @@ Regulation uses hysteresis: stop pumping at or above target and refill below tar
 
 At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff and must pass the physical-stop checks.
 
-The 60-second build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. The app's **Automated RIPC therapy** command and the physical green START button use the automated path. That path samples the MPRLS waveform during inflation, estimates systolic pressure using a smoothed pulse envelope, and selects `max(200, systolic + 50)` mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
+The build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. Experimental automation is disabled by default (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=0`); physical green START uses manual settings in that build. Only controlled bench builds explicitly enabling that flag use automated physical START and advertise support for the app's **Automated RIPC therapy** button. That path samples the MPRLS waveform during inflation, estimates systolic pressure using a smoothed pulse envelope, and selects `max(200, systolic + 50)` mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
 
 ## Buttons, remote control and stop conditions
 
@@ -95,9 +95,9 @@ STATE is exactly 20 bytes, fitting the default notification payload:
 | Byte offset | Content |
 | --- | --- |
 | 0 | Protocol version: 2 |
-| 1 | Phase: 0 idle, 1 pressurizing, 2 running, 3 completed, 4 stopped, 5 fault |
+| 1 | Phase: 0 idle, 1 pressurizing, 2 running, 3 completed, 4 stopped, 5 fault, 6 estimating systolic |
 | 2 | Reason: 0 none, 1 sensor, 2 overpressure, 3 build timeout, 4 heartbeat timeout, 5 disconnect, 6 physical stop, 7 app stop, 8 completed |
-| 3 | Flags: bit 0 pressure valid; bit 1 timer started; bit 2 pump commanded on; bit 3 vent commanded closed |
+| 3 | Flags: bit 0 pressure valid; bit 1 timer started; bit 2 pump commanded on; bit 3 vent commanded closed; bit 4 experimental automation supported; bit 5 current/last run is automated; bits 6–7 reserved |
 | 4–5 | Pressure uint16 in 0.1 mmHg; 0xFFFF when invalid |
 | 6–7 | Target mmHg uint16 |
 | 8–9 | Remaining seconds uint16, rounded up |
@@ -108,6 +108,8 @@ STATE is exactly 20 bytes, fitting the default notification payload:
 | 19 | Advancing uint8 frame counter, wraps at 256 |
 
 Telemetry publishes about every 200 ms, plus phase changes and forced command/stop reports. App START/STOP waits for the matching request acknowledgement rather than trusting an immediate read. An accepted command confirms processing, not verified mechanical actuation. The app times out a command after three seconds and disconnects if telemetry stops advancing for more than three seconds; reading a frozen STATE value does not count as fresh telemetry.
+
+The patient app hides automation unless bit 4 is set and the BLE driver also rejects unsupported automated requests locally. Older v2 firmware with no capability flags remains usable for manual sessions. Use the updated app with automation-enabled firmware: older apps may reject the newly assigned flag bits. Bit 5 separates computed targets from the app's manual target selection, including after completion/reconnection. Non-preset targets from older experimental firmware also do not overwrite manual selections. Automated START sends a 200 mmHg placeholder in the target field; the controller computes the actual target.
 
 ## Bench acceptance
 
