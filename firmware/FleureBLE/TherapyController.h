@@ -6,8 +6,8 @@ namespace fleure {
 // Keep existing numeric phase IDs unchanged for BLE protocol compatibility.
 enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fault, EstimatingSystolic };
 
-// Experimental automatic targeting is disabled until pressure and waveform
-// validation are complete. Opt in ONLY for controlled bench testing.
+// Experimental automatic targeting is enabled on this branch for controlled
+// bench testing only. Set the flag to 0 for manual-only physical START.
 #ifndef FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION
 #define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 1
 #endif

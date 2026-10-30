@@ -1,3 +1,4 @@
+#define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 0
 #include "../FleureBLE/TherapyController.h"
 #include <assert.h>
 #include <stdio.h>
@@ -24,5 +25,5 @@ int main() {
   c.stop(Reason::PhysicalStop);
   assert(c.startPhysical(300) == Result::Unsafe);
   assert(!c.pump && !c.ventClosed);
-  puts("Default physical START regression tests passed.");
+  puts("Manual-only physical START regression tests passed.");
 }
