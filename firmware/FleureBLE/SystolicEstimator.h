@@ -11,7 +11,11 @@ struct SystolicEstimator {
   enum class EstimateStatus : uint8_t {
     Accepted, BufferFull, TooFewSamples, NoOscillations, WeakSignal, NoCandidate
   };
-  static constexpr uint16_t Capacity = 900;
+  // Keep the complete inflation recording at the sensor's maximum sample rate.
+  // Include both endpoints of the 120-second window (6001 samples, ~48 KB).
+  static constexpr uint32_t RecordingDurationMs = 120000;
+  static constexpr uint32_t MinimumSampleIntervalMs = 20;
+  static constexpr uint16_t Capacity = RecordingDurationMs / MinimumSampleIntervalMs + 1;
   float pressures[Capacity] = {};
   float envelopes[Capacity] = {};
   uint16_t count = 0;

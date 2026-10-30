@@ -10,6 +10,8 @@
 #include "TherapyController.h"
 #include "SystolicEstimator.h"
 using namespace fleure;
+static_assert(SystolicEstimator::RecordingDurationMs >= Controller::InflationTimeoutMs,
+  "Estimator buffer must cover the controller pressure-build timeout");
 
 const int greenButton = 18, redButton = 19, pumpPin = 25, solenoidPin = 26;
 const int sensorSDA = 21, sensorSCL = 22;
@@ -101,7 +103,7 @@ void pollPressure(uint32_t now) {
   static uint32_t requestedAt = 0, lastCycle = 0, lastRead = 0;
   if (!wireReady) { therapy.sensorFailure(); return; }
   if (!waiting) {
-    if (uint32_t(now - lastCycle) < 20) return;
+    if (uint32_t(now - lastCycle) < SystolicEstimator::MinimumSampleIntervalMs) return;
     lastCycle = now;
     Wire.beginTransmission(sensorAddress); Wire.write(0xAA); Wire.write(0x00); Wire.write(0x00);
     if (Wire.endTransmission() != 0) { therapy.sensorFailure(); return; }

@@ -127,11 +127,14 @@ acceptance/failure detail, and any accepted estimate/target. `[controller]`
 reports phase/fault transitions and commanded outputs, including other faults.
 
 A smooth inflation ramp without alternating pressure variations reproduces the
-estimation failure at 200 mmHg. The estimator also has a fixed 900-sample buffer;
-at approximately 50 samples/second, inflation longer than about 18 seconds can
-exhaust it before reaching 200. Truncated recordings are now explicitly rejected
-instead of permitting a target based only on early inflation data. This guard
-does not fix the recording-duration limitation or validate the estimate. Use the
-logged reason to diagnose the next step rather than bypassing the fault.
+estimation failure at 200 mmHg. The previous 900-sample buffer could exhaust
+before pressure reached 200 (about 18 seconds at 50 samples/second). The buffer
+now holds 6001 samples: the full 120-second build window at the shared 20 ms
+minimum conversion interval, including endpoints. The two float arrays occupy
+48,008 bytes. A compile-time check prevents increasing the build timeout beyond
+the supported recording duration without updating the buffer. Overflow rejection
+remains in place; no samples are silently discarded or treated as a valid complete
+recording. This fixes truncation, not pulse detection or estimation accuracy. Use
+the logged reason to diagnose any remaining failure rather than bypassing it.
 
 Follow [../docs/TESTING.md](../docs/TESTING.md), including independent pressure measurement, sensor faults, cutoff, stop paths, output sequencing and overshoot. Verify the valve's physical vent behavior and actual pressure release, not only GPIO readings or app labels. Do not treat the configured pressure range or 300 mmHg software threshold as clinically validated limits.

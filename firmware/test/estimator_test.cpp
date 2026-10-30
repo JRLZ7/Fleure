@@ -22,6 +22,27 @@ int main() {
   assert(smooth.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
   assert(systolic == 0);
 
+  // Reproduce the reported 900-sample truncation during a ~20-second inflation.
+  // The last recorded pressure must reach 200, not freeze near 180.
+  SystolicEstimator reportedRun;
+  for (unsigned i = 1; i <= 1000; ++i) reportedRun.sample(i * 0.2f);
+  assert(reportedRun.count == 1000 && !reportedRun.overflowed);
+  assert(fabsf(reportedRun.pressures[reportedRun.count - 1] - 200.0f) < 0.01f);
+  assert(reportedRun.ready(200));
+  assert(reportedRun.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
+
+  // At the maximum polling rate, even the entire build-timeout window fits.
+  SystolicEstimator fullWindow;
+  unsigned expectedSamples = 0;
+  for (uint32_t elapsed = 0; elapsed <= SystolicEstimator::RecordingDurationMs;
+       elapsed += SystolicEstimator::MinimumSampleIntervalMs) {
+    fullWindow.sample(200.0f * float(elapsed) / SystolicEstimator::RecordingDurationMs);
+    ++expectedSamples;
+  }
+  assert(fullWindow.count == expectedSamples && !fullWindow.overflowed);
+  assert(fabsf(fullWindow.pressures[fullWindow.count - 1] - 200.0f) < 0.01f);
+  assert(fullWindow.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
+
   // A previously usable but truncated recording must not authorize a target.
   assert(estimator.estimate(systolic));
   for (unsigned i = estimator.count; i <= SystolicEstimator::Capacity; ++i)

@@ -172,7 +172,8 @@ These are acceptance procedures to execute in the integrated repository. The pre
 ## Release record
 
 Automated 200 mmHg fault diagnostics are covered by host tests for a smooth
-inflation without oscillations, buffer overflow rejection, estimator reset/reuse,
+inflation without oscillations, the reported >900-sample inflation, recording the
+entire 120-second window at 20 ms intervals, buffer overflow rejection, estimator reset/reuse,
 and a distinct estimation-failure reason with pump off/vent open. Mobile protocol
 tests decode that reason separately from invalid sensor data. Synthetic tests
 are not evidence of a valid blood-pressure measurement. For an actual fault,

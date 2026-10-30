@@ -7,6 +7,8 @@
 #include <stdio.h>
 
 using namespace fleure;
+static_assert(SystolicEstimator::RecordingDurationMs >= Controller::InflationTimeoutMs,
+  "Estimator recording must cover the complete pressure-build window");
 
 static void sampleAt(
     Controller& c,
