@@ -1,0 +1,41 @@
+name: Full test suite
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firmware-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run every firmware host test
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(firmware/test/*_test.cpp)
+          if (( ${#tests[@]} == 0 )); then
+            echo 'No firmware tests discovered' >&2
+            exit 1
+          fi
+          for source in "${tests[@]}"; do
+            name="$(basename "${source%.cpp}")"
+            c++ -std=c++11 -Wall -Wextra -Werror "$source" -o "/tmp/$name"
+            "/tmp/$name"
+          done
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: API and mobile tests
+        run: npm test
+      - name: Type checks for all workspaces
+        run: npm run check
+      - name: Clinician production build
+        run: npm run build

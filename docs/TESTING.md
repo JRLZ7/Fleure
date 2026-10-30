@@ -2,7 +2,7 @@
 
 This document covers the hardware-only pressure app and matching ESP32 protocol-v2 firmware. The old browser simulator and LED acceptance matrix no longer describe current behavior.
 
-The source implements one pressure-regulated timed hold. It is not a validated treatment protocol or a completed multi-cycle RIPC controller. Perform physical testing on a bench fixture with independent pressure measurement and protection, not on a person.
+The source implements one pressure-regulated timed hold. Automated RIPC adds on-device systolic estimation and a systolic-derived target; it is not a validated blood-pressure measurement or completed multi-cycle clinical RIPC controller. Perform physical testing on a bench fixture with independent pressure measurement and protection, not on a person.
 
 ## Verification status
 
@@ -35,6 +35,13 @@ c++ -std=c++11 -Wall -Wextra -Werror firmware/test/controller_test.cpp -o /tmp/f
 It covers all 63 target/duration combinations, holding the valve closed above
 target, pump refill hysteresis, timer completion, and stop/fault release paths.
 It tests commanded outputs only, not physical pressure retention or overshoot.
+
+The automated estimator regression check can be run with:
+
+```sh
+c++ -std=c++11 -Wall -Wextra -Werror firmware/test/estimator_test.cpp -o /tmp/fleure-estimator-test
+/tmp/fleure-estimator-test
+```
 
 From the repository root, using its lockfile and actual npm scripts:
 
@@ -163,5 +170,23 @@ Sign in before testing API outages: an unavailable API cannot authenticate a new
 These are acceptance procedures to execute in the integrated repository. The pressure update did not rerun the full API/clinician suite, provide device attestation, persist pressure traces, add registration/password reset or deploy a cloud service.
 
 ## Release record
+
+Automated 200 mmHg fault diagnostics are covered by host tests for a smooth
+inflation without oscillations, the reported >900-sample inflation, recording the
+entire 120-second window at 20 ms intervals, buffer overflow rejection, estimator reset/reuse,
+and a distinct estimation-failure reason with pump off/vent open. Mobile protocol
+tests decode that reason separately from invalid sensor data. Synthetic tests
+are not evidence of a valid blood-pressure measurement. For an actual fault,
+capture the `[systolic]` and `[controller]` Serial Monitor lines from the bench.
+
+Integration regressions are covered by the committed host and protocol tests:
+
+- Manual-only physical START (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=0`) runs manually and reuses last accepted manual settings; disabled automation still refuses automated START.
+- Automation-enabled physical START enters estimation and advertises its capability/run-mode flags. Tests explicitly select each setting independently of the branch default.
+- Legacy/default telemetry hides automation; enabled firmware advertises it before a run starts.
+- A computed target such as 215 mmHg, or an automated preset target, does not replace the manual selection after reconnection. Manual START encoding remains valid; automated START ignores the manual target and still validates duration.
+- All phases have app labels, including estimation; estimation is active so STOP remains available.
+
+Run `npm test` and compile/run each `firmware/test/*_test.cpp` with C++11. On the phone/bench, confirm a manual-only build's physical button starts a manual run, automation is hidden, and reconnection does not change manual targets to non-preset values. This branch defaults to automation enabled and requires separate controlled bench verification; these tests do not validate systolic estimation or physical actuation.
 
 Mark each procedure with date, tester, source version, measured result and evidence. Keep failed/blocked cases visible. Do not describe a native build, firmware upload, real BLE run or pressure test as passed until performed on the actual equipment.

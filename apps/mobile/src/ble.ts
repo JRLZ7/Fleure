@@ -1,7 +1,7 @@
 import { BleManager, Device, Subscription } from "react-native-ble-plx";
 import { PermissionsAndroid, Platform } from "react-native";
 import { Buffer } from "buffer";
-import { SERVICE, COMMAND, STATE, Driver, Telemetry, decodeTelemetry, encodeStart, encodeStop, TherapySettings } from "./protocol";
+import { SERVICE, COMMAND, STATE, Driver, Telemetry, decodeTelemetry, encodeStart, encodeStop, TherapySettings, supportsAutomation } from "./protocol";
 import { waitForBluetoothReady } from "./bluetoothReady";
 
 export function createBleDriver(): Driver {
@@ -133,8 +133,10 @@ export function createBleDriver(): Driver {
         return device.id;
       } catch (e) { await close(); throw e; }
     },
-    async start(settings: TherapySettings) {
-      const id = requestId(); await request(encodeStart(settings, id), id);
+    async start(settings: TherapySettings, automated = false) {
+      if (automated && !supportsAutomation(latest))
+        throw new Error("Experimental automation is not enabled on this firmware. Use manual Start.");
+      const id = requestId(); await request(encodeStart(settings, id, automated), id);
     },
     async stop() {
       const id = requestId(); await request(encodeStop(id), id);

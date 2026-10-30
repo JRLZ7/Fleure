@@ -1,6 +1,6 @@
 # Fleure ESP32 pressure-control firmware
 
-`FleureBLE/FleureBLE.ino` and `FleureBLE/TherapyController.h` implement pressure sensing, on/off pump/vent regulation, a device-owned countdown and BLE protocol v2. The device advertises as **Fleure-Pump**.
+`FleureBLE/FleureBLE.ino`, `FleureBLE/TherapyController.h` and `FleureBLE/SystolicEstimator.h` implement pressure sensing, on/off pump/vent regulation, a device-owned countdown and BLE protocol v2. The device advertises as **Fleure-Pump**.
 
 This replaces the earlier LED and pump-only sketches. The service/characteristic UUIDs remain the same, but **the START payload and state format have changed**. Flash this firmware together with the matching pressure-update app.
 
@@ -60,7 +60,7 @@ Regulation uses hysteresis: stop pumping at or above target and refill below tar
 
 At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff and must pass the physical-stop checks.
 
-The 60-second build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This implements one timed hold, not a repeated ischemia/reperfusion cycle sequence.
+The build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This branch enables experimental automation (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=1`) for controlled bench testing. Set the flag to `0` for a manual-only build, where physical green START uses manual settings and automation is hidden in the app. Enabled builds use automated physical START and advertise support for the app's **Automated RIPC therapy** button. That path samples the MPRLS waveform during inflation, estimates systolic pressure using a smoothed pulse envelope, and selects `max(200, systolic + 50)` mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
 
 ## Buttons, remote control and stop conditions
 
@@ -83,7 +83,8 @@ Use `apps/mobile/src/protocol.ts` as the matching application implementation. Mu
 
 | Command | Payload |
 | --- | --- |
-| START | 7 bytes: opcode 1, target uint16, duration-seconds uint16, request-ID uint16 |
+| START manual | 7 bytes: opcode 1, target uint16, duration-seconds uint16, request-ID uint16 |
+| START automated | 8 bytes: manual START fields plus mode byte `1` |
 | STOP | 3 bytes: opcode 0, request-ID uint16 |
 | Heartbeat | One byte: opcode 2 |
 | Legacy STOP | One byte: opcode 0; still accepted |
@@ -94,9 +95,9 @@ STATE is exactly 20 bytes, fitting the default notification payload:
 | Byte offset | Content |
 | --- | --- |
 | 0 | Protocol version: 2 |
-| 1 | Phase: 0 idle, 1 pressurizing, 2 running, 3 completed, 4 stopped, 5 fault |
-| 2 | Reason: 0 none, 1 sensor, 2 overpressure, 3 build timeout, 4 heartbeat timeout, 5 disconnect, 6 physical stop, 7 app stop, 8 completed |
-| 3 | Flags: bit 0 pressure valid; bit 1 timer started; bit 2 pump commanded on; bit 3 vent commanded closed |
+| 1 | Phase: 0 idle, 1 pressurizing, 2 running, 3 completed, 4 stopped, 5 fault, 6 estimating systolic |
+| 2 | Reason: 0 none, 1 sensor, 2 overpressure, 3 build timeout, 4 heartbeat timeout, 5 disconnect, 6 physical stop, 7 app stop, 8 completed, 9 systolic estimation failed |
+| 3 | Flags: bit 0 pressure valid; bit 1 timer started; bit 2 pump commanded on; bit 3 vent commanded closed; bit 4 experimental automation supported; bit 5 current/last run is automated; bits 6–7 reserved |
 | 4–5 | Pressure uint16 in 0.1 mmHg; 0xFFFF when invalid |
 | 6–7 | Target mmHg uint16 |
 | 8–9 | Remaining seconds uint16, rounded up |
@@ -108,6 +109,32 @@ STATE is exactly 20 bytes, fitting the default notification payload:
 
 Telemetry publishes about every 200 ms, plus phase changes and forced command/stop reports. App START/STOP waits for the matching request acknowledgement rather than trusting an immediate read. An accepted command confirms processing, not verified mechanical actuation. The app times out a command after three seconds and disconnects if telemetry stops advancing for more than three seconds; reading a frozen STATE value does not count as fresh telemetry.
 
+The patient app hides automation unless bit 4 is set and the BLE driver also rejects unsupported automated requests locally. Older v2 firmware with no capability flags remains usable for manual sessions. Use the updated app with automation-enabled firmware: older apps may reject the newly assigned flag bits. Bit 5 separates computed targets from the app's manual target selection, including after completion/reconnection. Non-preset targets from older experimental firmware also do not overwrite manual selections. Automated START sends a 200 mmHg placeholder in the target field; the controller computes the actual target.
+
 ## Bench acceptance
+
+### Debugging an automated stop at 200 mmHg
+
+The automated path first attempts estimation when measured pressure reaches
+200 mmHg and at least 100 samples are recorded. The pump pausing there with the
+valve closed is expected. A failed estimate faults and vents; it does not fall
+back to a guessed systolic pressure or start the timer. This is now reported as
+`systolic_estimation_failed`, separately from a pressure-sensor fault.
+
+With matching updated app/firmware, open Serial Monitor at 115200 baud for a
+bench run. `[systolic]` reports pressure, sample count, last stored pressure,
+acceptance/failure detail, and any accepted estimate/target. `[controller]`
+reports phase/fault transitions and commanded outputs, including other faults.
+
+A smooth inflation ramp without alternating pressure variations reproduces the
+estimation failure at 200 mmHg. The previous 900-sample buffer could exhaust
+before pressure reached 200 (about 18 seconds at 50 samples/second). The buffer
+now holds 6001 samples: the full 120-second build window at the shared 20 ms
+minimum conversion interval, including endpoints. The two float arrays occupy
+48,008 bytes. A compile-time check prevents increasing the build timeout beyond
+the supported recording duration without updating the buffer. Overflow rejection
+remains in place; no samples are silently discarded or treated as a valid complete
+recording. This fixes truncation, not pulse detection or estimation accuracy. Use
+the logged reason to diagnose any remaining failure rather than bypassing it.
 
 Follow [../docs/TESTING.md](../docs/TESTING.md), including independent pressure measurement, sensor faults, cutoff, stop paths, output sequencing and overshoot. Verify the valve's physical vent behavior and actual pressure release, not only GPIO readings or app labels. Do not treat the configured pressure range or 300 mmHg software threshold as clinically validated limits.
