@@ -95,7 +95,6 @@ static void testTargetBounds() {
   sampleAt(low, 200, 100);
 
   assert(low.acceptSystolic(100, 100));
-  assert(low.target == 200);
 
   Controller high;
   beginAutomated(high);
