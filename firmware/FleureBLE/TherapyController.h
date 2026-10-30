@@ -9,7 +9,7 @@ enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fa
 // Experimental automatic targeting is disabled until pressure and waveform
 // validation are complete. Opt in ONLY for controlled bench testing.
 #ifndef FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION
-#define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 0
+#define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 1
 #endif
 enum class Reason : uint8_t { None, Sensor, Overpressure, InflationTimeout, Heartbeat, Disconnect, PhysicalStop, AppStop, Complete };
 enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
