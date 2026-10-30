@@ -98,8 +98,7 @@ bool acceptSystolic(uint16_t value, uint32_t now) {
 
   const uint16_t proposed = uint16_t(value) + 50;
 
-  target = proposed < 200 ? 200 :
-           proposed > 275 ? 275 : proposed;
+  target = proposed > 275 ? 275 : proposed;
 
   systolic = value;
   phase = Phase::Pressurizing;
