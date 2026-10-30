@@ -96,7 +96,7 @@ STATE is exactly 20 bytes, fitting the default notification payload:
 | --- | --- |
 | 0 | Protocol version: 2 |
 | 1 | Phase: 0 idle, 1 pressurizing, 2 running, 3 completed, 4 stopped, 5 fault, 6 estimating systolic |
-| 2 | Reason: 0 none, 1 sensor, 2 overpressure, 3 build timeout, 4 heartbeat timeout, 5 disconnect, 6 physical stop, 7 app stop, 8 completed |
+| 2 | Reason: 0 none, 1 sensor, 2 overpressure, 3 build timeout, 4 heartbeat timeout, 5 disconnect, 6 physical stop, 7 app stop, 8 completed, 9 systolic estimation failed |
 | 3 | Flags: bit 0 pressure valid; bit 1 timer started; bit 2 pump commanded on; bit 3 vent commanded closed; bit 4 experimental automation supported; bit 5 current/last run is automated; bits 6–7 reserved |
 | 4–5 | Pressure uint16 in 0.1 mmHg; 0xFFFF when invalid |
 | 6–7 | Target mmHg uint16 |
@@ -112,5 +112,26 @@ Telemetry publishes about every 200 ms, plus phase changes and forced command/st
 The patient app hides automation unless bit 4 is set and the BLE driver also rejects unsupported automated requests locally. Older v2 firmware with no capability flags remains usable for manual sessions. Use the updated app with automation-enabled firmware: older apps may reject the newly assigned flag bits. Bit 5 separates computed targets from the app's manual target selection, including after completion/reconnection. Non-preset targets from older experimental firmware also do not overwrite manual selections. Automated START sends a 200 mmHg placeholder in the target field; the controller computes the actual target.
 
 ## Bench acceptance
+
+### Debugging an automated stop at 200 mmHg
+
+The automated path first attempts estimation when measured pressure reaches
+200 mmHg and at least 100 samples are recorded. The pump pausing there with the
+valve closed is expected. A failed estimate faults and vents; it does not fall
+back to a guessed systolic pressure or start the timer. This is now reported as
+`systolic_estimation_failed`, separately from a pressure-sensor fault.
+
+With matching updated app/firmware, open Serial Monitor at 115200 baud for a
+bench run. `[systolic]` reports pressure, sample count, last stored pressure,
+acceptance/failure detail, and any accepted estimate/target. `[controller]`
+reports phase/fault transitions and commanded outputs, including other faults.
+
+A smooth inflation ramp without alternating pressure variations reproduces the
+estimation failure at 200 mmHg. The estimator also has a fixed 900-sample buffer;
+at approximately 50 samples/second, inflation longer than about 18 seconds can
+exhaust it before reaching 200. Truncated recordings are now explicitly rejected
+instead of permitting a target based only on early inflation data. This guard
+does not fix the recording-duration limitation or validate the estimate. Use the
+logged reason to diagnose the next step rather than bypassing the fault.
 
 Follow [../docs/TESTING.md](../docs/TESTING.md), including independent pressure measurement, sensor faults, cutoff, stop paths, output sequencing and overshoot. Verify the valve's physical vent behavior and actual pressure release, not only GPIO readings or app labels. Do not treat the configured pressure range or 300 mmHg software threshold as clinically validated limits.

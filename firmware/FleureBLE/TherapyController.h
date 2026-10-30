@@ -11,7 +11,7 @@ enum class Phase : uint8_t { Idle, Pressurizing, Running, Completed, Stopped, Fa
 #ifndef FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION
 #define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 1
 #endif
-enum class Reason : uint8_t { None, Sensor, Overpressure, InflationTimeout, Heartbeat, Disconnect, PhysicalStop, AppStop, Complete };
+enum class Reason : uint8_t { None, Sensor, Overpressure, InflationTimeout, Heartbeat, Disconnect, PhysicalStop, AppStop, Complete, SystolicEstimation };
 enum class Result : uint8_t { None, Accepted, InvalidSettings, Busy, Unsafe };
 enum class Mode : uint8_t { Manual, AutomatedRipc };
 

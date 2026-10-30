@@ -76,3 +76,15 @@ test('undefined telemetry flags are still rejected', () => {
   assert.throws(() => decodeTelemetry(frame({ flags: 1 | 64 })));
   assert.throws(() => decodeTelemetry(frame({ flags: 1 | 128 })));
 });
+
+test('estimation failure has its own fault reason without invalidating healthy pressure', () => {
+  const b = frame({ flags: 1 | 16 | 32, phase: 5 });
+  b[2] = 9;
+  const t = decodeTelemetry(b);
+  assert.equal(t.phase, 'fault');
+  assert.equal(t.reason, 'systolic_estimation_failed');
+  assert.equal(t.pressureMmHg, 100);
+  assert.equal(isActive(t), false);
+  assert.equal(t.pumpOn, false);
+  assert.equal(t.ventClosed, false);
+});

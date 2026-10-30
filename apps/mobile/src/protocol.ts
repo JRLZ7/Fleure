@@ -28,6 +28,7 @@ export const REASONS = [
   "physical_stop",
   "app_stop",
   "completed",
+  "systolic_estimation_failed",
 ] as const;
 
 export type TherapyPhase = typeof PHASES[number];

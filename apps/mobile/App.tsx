@@ -349,6 +349,7 @@ export default function App() {
   const settingsLocked = therapyActive || stopping;
   const reasonLabels: Record<string, string> = {
     sensor_fault: "Sensor unavailable or invalid. Pump stopped; vent open.",
+    systolic_estimation_failed: "Unable to estimate systolic pressure from the recorded signal. Pump stopped; vent open. Check the Serial Monitor for details.",
     overpressure: "300 mmHg cutoff reached. Pump stopped; vent open.",
     pressure_build_timeout: "Target range was not reached within 60 seconds. Pump stopped; vent open.",
     heartbeat_timeout: "App heartbeat lost. Pump stopped; vent open.",

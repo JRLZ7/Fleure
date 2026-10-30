@@ -1,6 +1,7 @@
 
 #define FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION 1
 #include "../FleureBLE/TherapyController.h"
+#include "../FleureBLE/SystolicEstimator.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -144,6 +145,26 @@ int main() {
   testTargetBounds();
   testStaleSample();
   testEstimationTimeout();
+  {
+    Controller c;
+    SystolicEstimator estimator;
+    beginAutomated(c);
+    for (unsigned i = 1; i <= 800; ++i) {
+      const float pressure = i * 0.25f;
+      c.sample(pressure, i * 20);
+      estimator.sample(pressure);
+      c.tick(i * 20);
+    }
+    assert(c.phase == Phase::EstimatingSystolic && !c.pump && c.ventClosed);
+    uint16_t estimate = 0;
+    assert(estimator.ready(c.pressure));
+    assert(!estimator.estimate(estimate));
+    c.fail(Reason::SystolicEstimation);
+    assert(c.phase == Phase::Fault && c.reason == Reason::SystolicEstimation);
+    assert(c.pressureValid && !c.pump && !c.ventClosed);
+    assert(!c.timerStarted && c.target == 200);
+    assert(!c.acceptSystolic(165, 16000));
+  }
 
   puts("Automated controller regression tests passed.");
   return 0;

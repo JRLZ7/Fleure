@@ -171,6 +171,13 @@ These are acceptance procedures to execute in the integrated repository. The pre
 
 ## Release record
 
+Automated 200 mmHg fault diagnostics are covered by host tests for a smooth
+inflation without oscillations, buffer overflow rejection, estimator reset/reuse,
+and a distinct estimation-failure reason with pump off/vent open. Mobile protocol
+tests decode that reason separately from invalid sensor data. Synthetic tests
+are not evidence of a valid blood-pressure measurement. For an actual fault,
+capture the `[systolic]` and `[controller]` Serial Monitor lines from the bench.
+
 Integration regressions are covered by the committed host and protocol tests:
 
 - Manual-only physical START (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=0`) runs manually and reuses last accepted manual settings; disabled automation still refuses automated START.

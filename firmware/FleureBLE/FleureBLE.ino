@@ -52,9 +52,16 @@ void applyOutputs() {
 void publish(uint32_t now, bool force = false) {
   static uint32_t lastPublish = 0;
   static Phase previousPhase = Phase::Idle;
+  static Reason previousReason = Reason::None;
   static uint8_t frameCounter = 0;
-  if (!force && therapy.phase == previousPhase && uint32_t(now - lastPublish) < 200) return;
-  lastPublish = now; previousPhase = therapy.phase;
+  const bool changed = therapy.phase != previousPhase || therapy.reason != previousReason;
+  if (!force && !changed && uint32_t(now - lastPublish) < 200) return;
+  if (changed) {
+    Serial.printf("[controller] phase=%u reason=%u pressure=%.1f valid=%u target=%u pump=%u vent_closed=%u\n",
+      unsigned(therapy.phase), unsigned(therapy.reason), therapy.pressure,
+      unsigned(therapy.pressureValid), unsigned(therapy.target), unsigned(therapy.pump), unsigned(therapy.ventClosed));
+  }
+  lastPublish = now; previousPhase = therapy.phase; previousReason = therapy.reason;
   // Protocol v2: exactly 20 bytes, fitting the default BLE notification payload.
   uint8_t b[20] = {2, uint8_t(therapy.phase), uint8_t(therapy.reason), 0};
   b[3] = therapy.telemetryFlags();
@@ -140,13 +147,18 @@ if (therapy.phase == Phase::EstimatingSystolic &&
 
   if (systolicEstimator.ready(pressure)) {
     uint16_t systolic = 0;
-
-    if (!systolicEstimator.estimate(systolic) ||
+    const auto result = systolicEstimator.estimateDetailed(systolic);
+    Serial.printf("[systolic] pressure=%.1f mmHg samples=%u last_stored=%.1f result=%s estimate=%u\n",
+      pressure, systolicEstimator.count,
+      systolicEstimator.count ? systolicEstimator.pressures[systolicEstimator.count - 1] : 0.0f,
+      SystolicEstimator::statusText(result), systolic);
+    if (result != SystolicEstimator::EstimateStatus::Accepted ||
         !therapy.acceptSystolic(systolic, sampleTime)) {
-      therapy.fail(Reason::Sensor);
+      therapy.fail(Reason::SystolicEstimation);
       applyOutputs();
       return;
     }
+    Serial.printf("[systolic] target=%u mmHg phase=%u\n", therapy.target, unsigned(therapy.phase));
   }
 }
 
