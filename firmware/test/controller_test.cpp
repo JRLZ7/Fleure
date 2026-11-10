@@ -72,5 +72,45 @@ int main() {
     sampleAt(c, 0, Controller::InflationTimeoutMs);
     assert(c.reason == Reason::InflationTimeout && !c.pump && !c.ventClosed);
   }
+#if FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION
+  {
+    Controller c;
+    c.sample(0, 0);
+    assert(c.startAutomated(120, 0) == Result::Accepted);
+    assert(c.phase == Phase::EstimatingSystolic && c.active());
+    sampleAt(c, 195, 5);
+    assert(!c.timerStarted && c.phase == Phase::EstimatingSystolic);
+    sampleAt(c, 200, 10);
+    assert(!c.timerStarted && c.phase == Phase::EstimatingSystolic);
+    assert(c.acceptSystolic(165, 10));
+    assert(c.target == 215 && c.phase == Phase::Pressurizing);
+    sampleAt(c, 210, 15);
+    assert(c.timerStarted && c.phase == Phase::Running);
+  }
+  {
+    Controller c;
+    c.sample(0, 0);
+    assert(c.startAutomated(120, 0) == Result::Accepted);
+    c.stop(Reason::AppStop);
+    assert(!c.acceptSystolic(165, 10));
+    assert(c.phase == Phase::Stopped && !c.pump && !c.ventClosed);
+  }
+  {
+    Controller c;
+    c.sample(0, 0);
+    assert(c.startAutomated(120, 0) == Result::Accepted);
+    c.fail(Reason::Sensor);
+    assert(!c.acceptSystolic(165, 10));
+    assert(c.phase == Phase::Fault && !c.pump && !c.ventClosed);
+  }
+  puts("Automated phase checks passed.");
+#else
+  {
+    Controller c;
+    c.sample(0, 0);
+    assert(c.startAutomated(120, 0) == Result::Unsafe);
+    assert(!c.active() && !c.pump && !c.ventClosed);
+  }
+#endif
   puts("Controller checks passed: 63 target/duration combinations, pump-only hold/refill, completion and shutdown paths.");
 }

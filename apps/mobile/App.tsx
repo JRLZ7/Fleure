@@ -15,7 +15,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { createBleDriver } from "./src/ble";
-import { Driver, DeviceState, Telemetry, isActive, PRESSURES, DURATIONS, formatTime } from "./src/protocol";
+import { Driver, DeviceState, Telemetry, isActive, PRESSURES, DURATIONS, formatTime, PHASE_LABELS, manualSettingsForTelemetry, supportsAutomation } from "./src/protocol";
 type Event = {
   id: string;
   state: DeviceState;
@@ -150,13 +150,16 @@ export default function App() {
     const previous = lastTelemetry.current;
     lastTelemetry.current = t;
     setTherapy(t);
-    if (!previous || (isActive(t) && previous.runId !== t.runId)) { setTargetMmHg(t.targetMmHg); setDurationSeconds(t.durationSeconds); }
+    if (!previous || (isActive(t) && previous.runId !== t.runId)) {
+      setTargetMmHg(current => manualSettingsForTelemetry({ targetMmHg: current, durationSeconds: t.durationSeconds }, t).targetMmHg);
+      setDurationSeconds(t.durationSeconds);
+    }
     // Upload phase changes, not five pressure samples every second. Pressure is live display only.
     if (!previous || previous.phase !== t.phase || previous.reason !== t.reason || previous.runId !== t.runId) {
       event(isActive(t) ? "on" : "off", "device", `${t.phase}:${t.reason};target=${t.targetMmHg};duration=${t.durationSeconds};run=${t.runId}`);
     }
   }
-  async function toggleTherapy() {
+  async function toggleTherapy(automated = false) {
     const d = driver.current;
     if (!d || !connected) return;
     const stop = isActive(lastTelemetry.current) || starting;
@@ -165,7 +168,7 @@ export default function App() {
     if (stop) setStopping(true); else setStarting(true);
     try {
       if (stop) await d.stop();
-      else await d.start({ targetMmHg, durationSeconds });
+      else await d.start({ targetMmHg, durationSeconds }, automated);
     } catch (e) {
       if (commandGeneration.current === generation) setError((e as Error).message);
     } finally {
@@ -344,12 +347,9 @@ export default function App() {
   }
   const therapyActive = isActive(therapy) || starting;
   const settingsLocked = therapyActive || stopping;
-  const phaseLabels: Record<string, string> = {
-    idle: "Ready to start", pressurizing: "Building pressure", running: "Therapy in progress",
-    completed: "Therapy complete", stopped: "Session stopped", fault: "Device stopped · fault",
-  };
   const reasonLabels: Record<string, string> = {
     sensor_fault: "Sensor unavailable or invalid. Pump stopped; vent open.",
+    systolic_estimation_failed: "Unable to estimate systolic pressure from the recorded signal. Pump stopped; vent open. Check the Serial Monitor for details.",
     overpressure: "300 mmHg cutoff reached. Pump stopped; vent open.",
     pressure_build_timeout: "Target range was not reached within 60 seconds. Pump stopped; vent open.",
     heartbeat_timeout: "App heartbeat lost. Pump stopped; vent open.",
@@ -357,7 +357,7 @@ export default function App() {
     physical_stop: "Stopped using the physical STOP button.", app_stop: "Stopped from the app.",
     completed: "The ESP32 completed the timer, stopped the pump and opened the vent.",
   };
-  const deviceLabel = !connected ? "Not connected" : therapy ? phaseLabels[therapy.phase] : "Reading device…";
+  const deviceLabel = !connected ? "Not connected" : therapy ? PHASE_LABELS[therapy.phase] : "Reading device…";
   const countdown = therapy && (isActive(therapy) || therapy.timerStarted) ? therapy.remainingSeconds : durationSeconds;
   return (
     <SafeAreaView style={styles.screen}>
@@ -439,6 +439,12 @@ export default function App() {
                 disabled={!connected || !ready || stopping || (!therapyActive && (busy || !therapy || therapy.pressureMmHg === null || therapy.pressureMmHg >= 300))}
                 onPress={() => void toggleTherapy()}
               />
+              {!therapyActive && supportsAutomation(therapy) && <ActionButton
+                title="Automated RIPC therapy"
+                variant="primary"
+                disabled={!connected || !ready || stopping || busy || !therapy || therapy.pressureMmHg === null || therapy.pressureMmHg >= 300}
+                onPress={() => void toggleTherapy(true)}
+              />}
               <ActionButton title={busy && !connected ? "Please wait…" : connected ? "Disconnect device" : "Connect device"} variant="device" disabled={busy || !ready || starting || stopping} onPress={() => void action(connected ? disconnect : connect)} />
             </View>
 
