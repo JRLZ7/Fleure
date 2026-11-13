@@ -153,7 +153,7 @@ BLE pairing, authorization of nearby clients, device provisioning and a device-s
 
 ## 8. API, clinician dashboard and persistence
 
-The existing Node.js API uses Express, Zod, scrypt password hashes, bearer tokens and Node's built-in SQLite. server.ts reads process environment values; direct startup must explicitly load/export configuration. No production identity service or cloud deployment is provisioned.
+The existing Node.js API uses Express, Zod, scrypt password hashes, bearer tokens and Node's built-in SQLite. server.ts reads process environment values; direct startup must explicitly load/export configuration. The patient app connects to the deployed API at `https://fleure-378c.onrender.com`; no production identity service is provisioned.
 
 | Seeded account | Role/access |
 | --- | --- |

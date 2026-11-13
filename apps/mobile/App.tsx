@@ -34,9 +34,9 @@ type Session = {
 };
 type User = { id: string; name: string; role: string };
 const KEY = "fleure-pending-v1";
+const API_URL = "https://fleure-378c.onrender.com";
 export default function App() {
-  const [url, setUrl] = useState("http://localhost:3001"),
-    [email, setEmail] = useState("patient@fleure.local"),
+  const [email, setEmail] = useState("patient@fleure.local"),
     [password, setPassword] = useState(""),
     [token, setToken] = useState(""),
     [user, setUser] = useState<User | null>(null);
@@ -64,7 +64,6 @@ export default function App() {
   const scrollView = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const emailInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const passwordInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
-  const serverInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const focusedInput = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const scrollOffset = useRef(0);
   const keyboardTop = useRef<number | null>(null);
@@ -223,7 +222,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
   async function api(path: string, options: RequestInit = {}, auth = token) {
-    const r = await fetch(url.replace(/\/$/, "") + "/api" + path, {
+    const r = await fetch(API_URL + "/api" + path, {
       ...options,
       signal: AbortSignal.timeout(10000),
       headers: {
@@ -395,10 +394,7 @@ export default function App() {
             <Text style={styles.label}>EMAIL ADDRESS</Text>
             <TextInput ref={emailInput} onFocus={() => focusField(emailInput.current)} returnKeyType="next" onSubmitEditing={() => passwordInput.current?.focus()} blurOnSubmit={false} accessibilityLabel="Email address" style={styles.input} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="username" value={email} onChangeText={setEmail} placeholder="patient@fleure.local" placeholderTextColor="#64766E" />
             <Text style={styles.label}>PASSWORD</Text>
-            <TextInput ref={passwordInput} onFocus={() => focusField(passwordInput.current)} returnKeyType="next" onSubmitEditing={() => serverInput.current?.focus()} blurOnSubmit={false} accessibilityLabel="Password" style={styles.input} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" value={password} onChangeText={setPassword} placeholder="Enter your password" placeholderTextColor="#64766E" />
-            <Text style={styles.label}>SERVER ADDRESS</Text>
-            <TextInput ref={serverInput} onFocus={() => focusField(serverInput.current)} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} accessibilityLabel="API server address" style={styles.input} autoCapitalize="none" autoCorrect={false} keyboardType="url" value={url} onChangeText={setUrl} placeholder="http://192.168.1.10:3001" placeholderTextColor="#64766E" />
-            <Text style={styles.caption}>On a phone, use your computer’s local network address.</Text>
+            <TextInput ref={passwordInput} onFocus={() => focusField(passwordInput.current)} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} blurOnSubmit={false} accessibilityLabel="Password" style={styles.input} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" value={password} onChangeText={setPassword} placeholder="Enter your password" placeholderTextColor="#64766E" />
             <ActionButton title={busy ? "Signing in…" : "Sign in"} disabled={busy || !ready} onPress={() => void action(async () => {
               const b = await api("/login", { method: "POST", body: JSON.stringify({ email: email.trim(), password }) });
               if (b.user.role !== "patient") {

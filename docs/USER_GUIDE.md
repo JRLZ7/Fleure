@@ -10,8 +10,8 @@ You need:
 
 - A powered Fleure ESP32 device with the matching pressure-control firmware.
 - A physical Android or iPhone development build of the Fleure app.
-- The API running on the computer that the phone can reach.
-- The patient email, password and API server address provided for your setup.
+- Internet access so the app can reach the Fleure API.
+- The patient email and password provided for your setup.
 
 The browser version can display the interface, but it cannot connect to the
 Bluetooth device or run therapy. Expo Go is also not sufficient because the
@@ -21,12 +21,10 @@ app needs the native Bluetooth module.
 
 1. Open Fleure on the phone.
 2. Enter the patient email and password.
-3. Enter the API server address. On a phone, this is usually the computer's
-   local-network address, such as `http://192.168.1.10:3001`, not
-   `http://localhost:3001`.
-4. Tap **Sign in**.
-5. Turn on Bluetooth and keep the phone near the ESP32.
-6. Tap **Connect device** and wait for the device status to show **Connected**.
+3. Tap **Sign in**. The app connects automatically to
+   `https://fleure-378c.onrender.com`.
+4. Turn on Bluetooth and keep the phone near the ESP32.
+5. Tap **Connect device** and wait for the device status to show **Connected**.
 
 The app connects to the first compatible Fleure device it finds. Keep the app
 in the foreground while connected. Backgrounding the app ends the Bluetooth
@@ -87,7 +85,7 @@ does not upload a continuous pressure graph or countdown history.
 | Unable to estimate systolic pressure | Automated estimation failed safely. The pump stopped and the vent opened; use manual mode only if the technical operator approves it. |
 | Bluetooth disconnected | Reconnect deliberately. There is no automatic resume, and the app cannot prove the physical output state after losing contact. |
 | No device acknowledgement | The app closed the connection after waiting for the device. Check the device before reconnecting. |
-| Sign in failed | Check the email, password and server address. The demo email addresses are lowercase. |
+| Sign in failed | Check the email and password, and confirm the phone has internet access. The demo email addresses are lowercase. |
 | Sync failed | Keep the app data, restore the API connection and tap **Sync & refresh history** again. |
 
 If the pump does not stop or the vent does not open as expected, use the

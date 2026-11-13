@@ -100,7 +100,12 @@ npm run dev:clinician
 
 The API reads `DEMO_PASSWORD`, `DATABASE_PATH`, `HOST`, `PORT` and `CORS_ORIGINS` from the process environment. If starting `server.ts` directly, load/export your `.env` values explicitly; the supplied entry point does not load `.env` itself. The default database filename is `fleure.db`, resolved relative to the API process working directory.
 
-For a physical phone, set `HOST=0.0.0.0`, restart the API and enter `http://YOUR_COMPUTER_LAN_IP:3001` in the patient app. The phone and computer must be reachable over the network. Use an HTTPS endpoint if the phone's network policy blocks local HTTP. The clinician dev server normally runs at `http://localhost:5173` and proxies `/api` to the API.
+The patient app connects automatically to the deployed API at
+`https://fleure-378c.onrender.com`; it no longer prompts for a server address.
+For local API development, set `HOST=0.0.0.0`, restart the API and update the
+app's `API_URL` constant temporarily if the phone must connect to a computer on
+the local network. The clinician dev server normally runs at
+`http://localhost:5173` and proxies `/api` to the local API.
 
 For browser requests, match `CORS_ORIGINS` to the exact requesting origins and restart the API after changes. Native apps do not use browser CORS.
 
@@ -127,7 +132,7 @@ The browser can render the login and interface, but **cannot connect or run ther
 ## Run a bench session
 
 1. Wire and bench-check the hardware using the firmware README. Power one prototype; the app currently connects to the first matching Fleure service.
-2. Sign in with the patient account and the configured API address.
+2. Sign in with the patient account; the app uses the deployed API automatically.
 3. Connect to `Fleure-Pump`. A fresh, valid pressure reading is required before Start.
 4. Choose pressure and duration, then press Start. Settings are sent when Start is pressed, not when a selector is tapped.
 5. The ESP32 builds pressure. Its countdown begins on first entry into the ±5 mmHg band and continues until completion unless stopped or faulted.
