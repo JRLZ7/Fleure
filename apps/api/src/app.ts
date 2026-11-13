@@ -56,11 +56,8 @@ export function createApp(path = ":memory:", password?: string) {
   const app = express();
   app.use(
     cors({
-      origin: (
-        process.env.CORS_ORIGINS ||
-        "http://localhost:5173,http://localhost:8081"
-      ).split(","),
-    }),
+      origin: "*"
+    })
   );
   app.use(express.json({ limit: "64kb" }));
   const attempts = new Map<string, { count: number; until: number }>();
