@@ -16,6 +16,10 @@ struct SystolicEstimator {
   static constexpr uint32_t RecordingDurationMs = 120000;
   static constexpr uint32_t MinimumSampleIntervalMs = 20;
   static constexpr float ReadyPressureMmHg = 150.0f;
+  // A centered two-second window removes the approximately linear inflation
+  // ramp while retaining the cardiac-pressure oscillation.
+  static constexpr uint16_t OscillationWindowSamples = 101;
+  static constexpr float MinimumOscillationMmHg = 0.03f;
   static constexpr uint16_t Capacity = RecordingDurationMs / MinimumSampleIntervalMs + 1;
   float pressures[Capacity] = {};
   float envelopes[Capacity] = {};
@@ -64,27 +68,40 @@ struct SystolicEstimator {
     // Never select a target from a truncated recording of only early inflation.
     if (overflowed) return EstimateStatus::BufferFull;
     if (count < 100) return EstimateStatus::TooFewSamples;
-    // Reject an inflation ramp without measurable alternating pressure
-    // variations. This gate is deliberately only a sanity check, NOT a
-    // clinically validated systolic estimator.
+    // Work on a centered, locally detrended signal. Comparing adjacent raw
+    // pressure samples makes a normal inflation ramp hide small cardiac
+    // oscillations, because the ramp's positive slope dominates each sample.
+    const uint16_t halfWindow = OscillationWindowSamples / 2;
+    if (count <= OscillationWindowSamples) return EstimateStatus::TooFewSamples;
     unsigned reversals = 0;
     int previousDirection = 0;
-    for (uint16_t i = 1; i < count; ++i) {
-      const float delta = pressures[i] - pressures[i - 1];
-      const int direction = delta > 0.08f ? 1 : delta < -0.08f ? -1 : 0;
+    float filteredEnvelope = 0;
+    float maximum = 0;
+    for (uint16_t i = halfWindow; i + halfWindow < count; ++i) {
+      float localMean = 0;
+      for (uint16_t j = i - halfWindow; j <= i + halfWindow; ++j)
+        localMean += pressures[j];
+      const float signal = pressures[i] - localMean / OscillationWindowSamples;
+      filteredEnvelope += 0.18f * (fabsf(signal) - filteredEnvelope);
+      if (filteredEnvelope > maximum) maximum = filteredEnvelope;
+      const int direction = signal > MinimumOscillationMmHg ? 1 :
+                            signal < -MinimumOscillationMmHg ? -1 : 0;
       if (direction == 0) continue;
       if (previousDirection != 0 && direction != previousDirection) ++reversals;
       previousDirection = direction;
     }
     if (reversals < 8) return EstimateStatus::NoOscillations;
-    float maximum = 0;
-    for (uint16_t i = 20; i < count; ++i)
-      if (envelopes[i] > maximum) maximum = envelopes[i];
-    if (!(maximum > 0.01f)) return EstimateStatus::WeakSignal;
+    if (!(maximum > MinimumOscillationMmHg)) return EstimateStatus::WeakSignal;
 
     const float threshold = maximum * 0.55f;
-    for (uint16_t i = 20; i < count; ++i) {
-      if (pressures[i] >= 60.0f && envelopes[i] >= threshold) {
+    filteredEnvelope = 0;
+    for (uint16_t i = halfWindow; i + halfWindow < count; ++i) {
+      float localMean = 0;
+      for (uint16_t j = i - halfWindow; j <= i + halfWindow; ++j)
+        localMean += pressures[j];
+      const float signal = pressures[i] - localMean / OscillationWindowSamples;
+      filteredEnvelope += 0.18f * (fabsf(signal) - filteredEnvelope);
+      if (pressures[i] >= 60.0f && filteredEnvelope >= threshold) {
         const float value = pressures[i];
         if (value >= 80.0f && value <= 240.0f) {
           systolic = uint16_t(value + 0.5f);

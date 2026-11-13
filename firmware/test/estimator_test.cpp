@@ -32,6 +32,15 @@ int main() {
   assert(reportedRun.ready(SystolicEstimator::ReadyPressureMmHg));
   assert(reportedRun.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
 
+  // A realistic inflation slope must not mask a small alternating pressure
+  // signal. The estimator should detrend the ramp before looking for pulses.
+  SystolicEstimator rampWithPulse;
+  for (int i = 0; i < 700; ++i)
+    rampWithPulse.sample(2.4f + i * 0.21f + 0.5f * sinf(i * 0.1256637f));
+  assert(rampWithPulse.ready(150.5f));
+  assert(rampWithPulse.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::Accepted);
+  assert(systolic >= 80 && systolic <= 240);
+
   // At the maximum polling rate, even the entire build-timeout window fits.
   SystolicEstimator fullWindow;
   unsigned expectedSamples = 0;
