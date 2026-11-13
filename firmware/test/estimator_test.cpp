@@ -18,7 +18,8 @@ int main() {
 
   SystolicEstimator smooth;
   for (int i = 1; i <= 800; ++i) smooth.sample(i * 0.25f);
-  assert(smooth.ready(200));
+  assert(!smooth.ready(SystolicEstimator::ReadyPressureMmHg - 1));
+  assert(smooth.ready(SystolicEstimator::ReadyPressureMmHg));
   assert(smooth.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
   assert(systolic == 0);
 
@@ -28,7 +29,7 @@ int main() {
   for (unsigned i = 1; i <= 1000; ++i) reportedRun.sample(i * 0.2f);
   assert(reportedRun.count == 1000 && !reportedRun.overflowed);
   assert(fabsf(reportedRun.pressures[reportedRun.count - 1] - 200.0f) < 0.01f);
-  assert(reportedRun.ready(200));
+  assert(reportedRun.ready(SystolicEstimator::ReadyPressureMmHg));
   assert(reportedRun.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::NoOscillations);
 
   // At the maximum polling rate, even the entire build-timeout window fits.

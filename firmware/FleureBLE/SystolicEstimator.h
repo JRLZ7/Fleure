@@ -15,6 +15,7 @@ struct SystolicEstimator {
   // Include both endpoints of the 120-second window (6001 samples, ~48 KB).
   static constexpr uint32_t RecordingDurationMs = 120000;
   static constexpr uint32_t MinimumSampleIntervalMs = 20;
+  static constexpr float ReadyPressureMmHg = 150.0f;
   static constexpr uint16_t Capacity = RecordingDurationMs / MinimumSampleIntervalMs + 1;
   float pressures[Capacity] = {};
   float envelopes[Capacity] = {};
@@ -43,7 +44,7 @@ struct SystolicEstimator {
   }
 
   bool ready(float pressure) const {
-    return count >= 100 && pressure >= 200.0f;
+    return count >= 100 && pressure >= ReadyPressureMmHg;
   }
 
   static const char* statusText(EstimateStatus status) {

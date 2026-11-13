@@ -24,6 +24,7 @@ static void beginAutomated(Controller& c) {
 
   assert(c.startAutomated(120, 0) == Result::Accepted);
   assert(c.phase == Phase::EstimatingSystolic);
+  assert(c.target == Controller::AutomatedInflationTarget);
   assert(!c.timerStarted);
   assert(c.active());
 }
@@ -41,11 +42,11 @@ static void testCountdownDoesNotStartDuringEstimation() {
   assert(!c.timerStarted);
 
   assert(c.acceptSystolic(165, 200));
-  assert(c.target == 215);
+  assert(c.target == 175);
   assert(c.phase == Phase::Pressurizing);
   assert(!c.timerStarted);
 
-  sampleAt(c, 210, 300);
+  sampleAt(c, 170, 300);
   assert(c.phase == Phase::Running);
   assert(c.timerStarted);
   assert(c.countdownAt == 300);
@@ -101,7 +102,7 @@ static void testTargetBounds() {
   sampleAt(high, 200, 100);
 
   assert(high.acceptSystolic(240, 100));
-  assert(high.target == 275);
+  assert(high.target == 250);
 }
 
 static void testStaleSample() {
@@ -163,7 +164,7 @@ int main() {
     c.fail(Reason::SystolicEstimation);
     assert(c.phase == Phase::Fault && c.reason == Reason::SystolicEstimation);
     assert(c.pressureValid && !c.pump && !c.ventClosed);
-    assert(!c.timerStarted && c.target == 200);
+    assert(!c.timerStarted && c.target == Controller::AutomatedInflationTarget);
     assert(!c.acceptSystolic(165, 16000));
   }
 

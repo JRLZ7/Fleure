@@ -83,8 +83,8 @@ int main() {
     sampleAt(c, 200, 10);
     assert(!c.timerStarted && c.phase == Phase::EstimatingSystolic);
     assert(c.acceptSystolic(165, 10));
-    assert(c.target == 215 && c.phase == Phase::Pressurizing);
-    sampleAt(c, 210, 15);
+    assert(c.target == 175 && c.phase == Phase::Pressurizing);
+    sampleAt(c, 170, 15);
     assert(c.timerStarted && c.phase == Phase::Running);
   }
   {
