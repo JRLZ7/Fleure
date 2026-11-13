@@ -5,7 +5,7 @@ import { encodeStart } from '../src/protocol.ts';
 test('encodes manual and automated START commands distinctly', () => {
   const settings = { targetMmHg: 200, durationSeconds: 120 };
   assert.equal(encodeStart(settings, 7).length, 7);
-  assert.deepEqual([...encodeStart(settings, 7, true)], [1, 150, 0, 120, 0, 7, 0, 1]);
+  assert.deepEqual([...encodeStart(settings, 7, true)], [1, 175, 0, 120, 0, 7, 0, 1]);
 });
 
 import {
@@ -46,6 +46,12 @@ test('computed target survives decoding without poisoning manual restart after r
   assert.equal(encodeStart(manual, 8).length, 7);
 });
 
+test('low computed automated targets remain valid after reconnect', () => {
+  const t = decodeTelemetry(frame({ flags: 1 | 16 | 32, target: 98 }));
+  assert.equal(t.targetMmHg, 98);
+  assert.equal(t.automatedRun, true);
+});
+
 test('legacy non-preset and preset automated targets both preserve manual choice', () => {
   const current = { targetMmHg: 175, durationSeconds: 120 };
   for (const [target, flags] of [[215, 1], [200, 1 | 16 | 32]]) {
@@ -60,7 +66,7 @@ test('manual firmware settings still synchronize on reconnect', () => {
 });
 
 test('automated START ignores computed/manual target, but validates duration', () => {
-  assert.deepEqual([...encodeStart({ targetMmHg: 215, durationSeconds: 120 }, 8, true)], [1, 150, 0, 120, 0, 8, 0, 1]);
+  assert.deepEqual([...encodeStart({ targetMmHg: 215, durationSeconds: 120 }, 8, true)], [1, 175, 0, 120, 0, 8, 0, 1]);
   assert.throws(() => encodeStart({ targetMmHg: 215, durationSeconds: 120 }, 8));
   assert.throws(() => encodeStart({ targetMmHg: 215, durationSeconds: 121 }, 8, true));
 });

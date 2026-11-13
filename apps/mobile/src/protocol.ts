@@ -97,7 +97,9 @@ export function validateSettings(s: TherapySettings): void {
 function validateTelemetrySettings(s: TherapySettings): void {
   if (
     !Number.isInteger(s.targetMmHg)
-    || s.targetMmHg < 125
+    // Automated targets are systolic + 10; the controller accepts systolic
+    // estimates from 80 mmHg, so the lowest valid computed target is 90.
+    || s.targetMmHg < 90
     || s.targetMmHg > 275
     || !(DURATIONS as readonly number[]).includes(s.durationSeconds)
   ) {
