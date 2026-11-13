@@ -17,7 +17,6 @@ The sketch has been host-compiled against API stubs and exercised with mocked I/
 | Connection | GPIO | Assumption |
 | --- | --- | --- |
 | Green START | 18 | Button to GND, internal pull-up |
-| Red STOP | 19 | Button to GND, internal pull-up |
 | Pump driver input | 25 | HIGH runs pump; LOW stops it |
 | Solenoid driver input | 26 | HIGH closes vent; LOW opens vent |
 | Sensor SDA | 21 | I²C data |
@@ -58,14 +57,13 @@ An accepted START requires valid settings and a fresh pressure sample below 300 
 
 Regulation uses hysteresis: stop pumping at or above target and refill below target minus 5. Keep the valve closed throughout an active run; pressure above target is not actively vented unless the 300 mmHg fault cutoff is reached. It is not PWM/PID and cannot establish exact constancy without hardware tests. The cutoff overrides regulation and timer-start eligibility: at a 275 mmHg target, 300 mmHg is a fault.
 
-At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff and must pass the physical-stop checks.
+At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff.
 
 The build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This branch enables experimental automation (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=1`) for controlled bench testing. Set the flag to `0` for a manual-only build, where physical green START uses manual settings and automation is hidden in the app. Enabled builds use automated physical START and advertise support for the app's **Automated RIPC therapy** button. That path samples the MPRLS waveform during inflation up to 175 mmHg, estimates systolic pressure using a smoothed pulse envelope, and selects systolic + 10 mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
 
 ## Buttons, remote control and stop conditions
 
-- Red STOP uses the raw input for prompt shutdown and debounced state to block starts during release bounce. It takes priority over green START and remote START.
-- Green START is debounced. After a stop condition, it must be released and pressed again. It uses the board's last accepted target/duration, initially the boot defaults.
+- Green START/STOP is debounced. Pressing green while active stops and vents; after a stop condition, it must be released and pressed again before another start. It uses the board's last accepted target/duration, initially the boot defaults.
 - Choosing settings in the app does not configure physical START until an app START using those settings is accepted.
 - Physical-only runs do not require app heartbeats. Sensor checks, pressure regulation, countdown, cutoff and build timeout still apply.
 - An established BLE disconnect stops an active run, including one started physically. A remotely started run also stops when heartbeats have been absent for more than five seconds. The app normally sends one heartbeat per second.

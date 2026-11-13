@@ -74,22 +74,21 @@ This is hysteretic regulation intended to control pressure near the target. Actu
 | Invalid/missing pressure or sensor status fault | Sensor fault; pump off, vent open |
 | Pressure reading older than 250 ms | Sensor fault; pump off, vent open |
 | Initial start band not reached within 60 seconds | Build-timeout fault; pump off, vent open |
-| Physical red STOP or app STOP | Stop and vent |
+| App STOP | Stop and vent |
 | Established BLE disconnect | Stop and vent, including a physically started run |
 | Remote heartbeat absent for more than five seconds | Stop and vent a remotely started run |
 | Countdown complete | Completed, zero remaining time, pump off, vent open |
 | Boot/reset | Initialize pump off and vent open; never automatically start |
 
-The 60-second pressure-build timeout is an additional configurable bench default in TherapyController.h. It is separate from the user-selected duration. Cutoff uses the unsmoothed pressure measurement. Faults do not automatically restart; a new START requires fresh valid pressure below the cutoff and must pass physical-stop checks.
+The 60-second pressure-build timeout is an additional configurable bench default in TherapyController.h. It is separate from the user-selected duration. Cutoff uses the unsmoothed pressure measurement. Faults do not automatically restart; a new START requires fresh valid pressure below the cutoff.
 
-Green physical START uses the last accepted board settings, initially 200 mmHg / 2:00. A new app selection alone does not configure physical START. Physical-only runs do not require app heartbeats, but still use sensing, regulation, countdown and fault handling. Red STOP takes priority; physical green must be released/re-pressed after a stop condition.
+Green physical START/STOP uses the last accepted board settings, initially 200 mmHg / 2:00. A new app selection alone does not configure physical START. Physical-only runs do not require app heartbeats, but still use sensing, regulation, countdown and fault handling. Pressing green while active stops and vents; after a stop condition, green must be released and pressed again.
 
 ## 5. GPIOs, power and sensor
 
 | Connection | ESP32 connection | Current firmware assumption |
 | --- | --- | --- |
 | Physical START button | GPIO 18 to GND | INPUT_PULLUP, active LOW |
-| Physical STOP button | GPIO 19 to GND | INPUT_PULLUP, active LOW |
 | Pump transistor control | GPIO 25 | HIGH runs pump; LOW stops pump |
 | Valve transistor control | GPIO 26 | HIGH energizes/closes vent; LOW opens vent |
 | Pressure SDA | GPIO 21 | I²C data |

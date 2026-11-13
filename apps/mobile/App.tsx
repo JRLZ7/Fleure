@@ -354,7 +354,7 @@ export default function App() {
     pressure_build_timeout: "Target range was not reached within 60 seconds. Pump stopped; vent open.",
     heartbeat_timeout: "App heartbeat lost. Pump stopped; vent open.",
     disconnected: "Bluetooth disconnected. Pump stopped; vent open.",
-    physical_stop: "Stopped using the physical STOP button.", app_stop: "Stopped from the app.",
+    physical_stop: "Stopped using the physical green button.", app_stop: "Stopped from the app.",
     completed: "The ESP32 completed the timer, stopped the pump and opened the vent.",
   };
   const deviceLabel = !connected ? "Not connected" : therapy ? PHASE_LABELS[therapy.phase] : "Reading device…";
