@@ -13,7 +13,7 @@ using namespace fleure;
 static_assert(SystolicEstimator::RecordingDurationMs >= Controller::InflationTimeoutMs,
               "Estimator buffer must cover the controller pressure-build timeout");
 
-const int greenButton = 21, redButton = 19, pumpPin = 32, solenoidPin = 33;
+const int greenButton = 21, redButton = 19, pumpPin = 33, solenoidPin = 32;
 const int sensorSDA = 16, sensorSCL = 17;
 const uint8_t sensorAddress = 0x18;
 const char *SERVICE = "b498a000-8a8a-4b27-a8c5-9d0a214c1000";
