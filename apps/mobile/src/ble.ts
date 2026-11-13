@@ -58,7 +58,7 @@ export function createBleDriver(): Driver {
           const errors: Record<number, string> = {
             2: "Device rejected the selected settings.",
             3: "A session is already active.",
-            4: "Device refused to start: check the sensor, pressure and physical STOP button.",
+            4: "Device refused to start: check the sensor, pressure and physical green button.",
           };
           throw new Error(errors[latest.result] || "Command was not accepted.");
         }

@@ -13,7 +13,7 @@ using namespace fleure;
 static_assert(SystolicEstimator::RecordingDurationMs >= Controller::InflationTimeoutMs,
               "Estimator buffer must cover the controller pressure-build timeout");
 
-const int greenButton = 21, redButton = 19, pumpPin = 33, solenoidPin = 32;
+const int greenButton = 21, pumpPin = 33, solenoidPin = 32;
 const int sensorSDA = 16, sensorSCL = 17;
 const uint8_t sensorAddress = 0x18;
 const char *SERVICE = "b498a000-8a8a-4b27-a8c5-9d0a214c1000";
@@ -51,7 +51,7 @@ struct Button
     return false;
   }
 };
-Button green{greenButton}, red{redButton};
+Button green{greenButton};
 uint16_t read16(const uint8_t *b) { return uint16_t(b[0]) | (uint16_t(b[1]) << 8); }
 void put16(uint8_t *b, uint16_t v)
 {
@@ -273,7 +273,6 @@ void setup()
   pinMode(pumpPin, OUTPUT);
   pinMode(solenoidPin, OUTPUT);
   pinMode(greenButton, INPUT_PULLUP);
-  pinMode(redButton, INPUT_PULLUP);
   mustReleaseGreen = digitalRead(greenButton) == LOW;
   wireReady = Wire.begin(sensorSDA, sensorSCL, 100000);
   Wire.setTimeOut(20);
@@ -297,7 +296,6 @@ void loop()
 {
   uint32_t now = millis();
   bool greenPress = green.press(now);
-  red.press(now);
   bool start, stop, lost, hb, link, automated;
   uint16_t p, seconds, startId, stopId;
   portENTER_CRITICAL(&mux);
@@ -315,13 +313,10 @@ void loop()
   portEXIT_CRITICAL(&mux);
   if (hb)
     lastHeartbeat = now;
-  bool redHeld = digitalRead(redButton) == LOW || red.stable == LOW;
   bool heartbeatLost = remoteOn && uint32_t(now - lastHeartbeat) > 5000;
-  if (redHeld || stop || lost || heartbeatLost)
+  if (stop || lost || heartbeatLost)
   {
-    therapy.stop(redHeld ? Reason::PhysicalStop : stop ? Reason::AppStop
-                                              : lost   ? Reason::Disconnect
-                                                       : Reason::Heartbeat);
+    therapy.stop(stop ? Reason::AppStop : lost ? Reason::Disconnect : Reason::Heartbeat);
     remoteOn = false;
     mustReleaseGreen = true;
     if (stop)
@@ -340,7 +335,22 @@ void loop()
   {
     if (green.stable == HIGH && digitalRead(greenButton) == HIGH)
       mustReleaseGreen = false;
-    if (start && link)
+    if (greenPress && !mustReleaseGreen)
+    {
+      if (therapy.active())
+      {
+        therapy.stop(Reason::PhysicalStop);
+        remoteOn = false;
+        mustReleaseGreen = true;
+      }
+      else if (therapy.startPhysical(now) == Result::Accepted)
+      {
+        if (therapy.mode == Mode::AutomatedRipc)
+          systolicEstimator.reset();
+        remoteOn = false;
+      }
+    }
+    else if (start && link)
     {
       ackRequest = startId;
       ackResult = automated ? therapy.startAutomated(seconds, now) : therapy.start(p, seconds, now);
@@ -350,15 +360,6 @@ void loop()
       {
         remoteOn = true;
         lastHeartbeat = now;
-      }
-    }
-    else if (greenPress && !mustReleaseGreen)
-    {
-      if (therapy.startPhysical(now) == Result::Accepted)
-      {
-        if (therapy.mode == Mode::AutomatedRipc)
-          systolicEstimator.reset();
-        remoteOn = false;
       }
     }
   }

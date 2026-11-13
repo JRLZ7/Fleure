@@ -98,7 +98,7 @@ The browser can render the login and interface, but **cannot connect or run ther
 3. Connect to `Fleure-Pump`. A fresh, valid pressure reading is required before Start.
 4. Choose pressure and duration, then press Start. Settings are sent when Start is pressed, not when a selector is tapped.
 5. The ESP32 builds pressure. Its countdown begins on first entry into the ±5 mmHg band and continues until completion unless stopped or faulted.
-6. Use STOP or the physical red button to end early. At normal completion, confirm pump off, vent open and Completed / 0:00 in the app.
+6. Press the physical green button again or use app STOP to end early. At normal completion, confirm pump off, vent open and Completed / 0:00 in the app.
 7. Press **Sync & refresh history** to upload queued events and refresh history.
 8. On the clinician dashboard, sign in as the clinician, choose Demo Patient and refresh uploaded data.
 
@@ -108,7 +108,7 @@ Keep the app in the foreground. Backgrounding closes BLE and ends the local conn
 
 Green START uses the board's last accepted settings, initially 200 mmHg / 2:00. App selections are not sent until app Start. Physical-only operation does not require app heartbeats, but still uses pressure regulation, the countdown and fault shutdown. An established BLE disconnect stops an active run regardless of how it started.
 
-Red STOP takes priority; green must be released and pressed again after a stop condition. Remote runs stop if heartbeats are absent for more than five seconds. The app disconnects if the device telemetry frame counter stops advancing for more than three seconds; command acknowledgement also has a three-second deadline. Sensor readings older than 250 ms trigger a firmware fault. These are software behaviors, not independent hardware emergency protection.
+Pressing green again stops an active run and opens the vent; after a stop condition, green must be released and pressed again. Remote runs stop if heartbeats are absent for more than five seconds. The app disconnects if the device telemetry frame counter stops advancing for more than three seconds; command acknowledgement also has a three-second deadline. Sensor readings older than 250 ms trigger a firmware fault. These are software behaviors, not independent hardware emergency protection.
 
 ## Data and clinician visibility
 

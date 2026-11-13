@@ -132,9 +132,8 @@ Exercise all selector values with automated tests, then bench-test pressure resp
 | Action | Expected |
 | --- | --- |
 | Physical green START | Uses last accepted board settings, initially 200 mmHg / 2:00 |
-| Physical red STOP | Pump off and vent open; STOP takes priority |
-| Both buttons held; or app START while red held | No active run; releasing red alone must not start a run |
-| Hold green while pressing/releasing red | No restart until green is released/re-pressed or a new permitted remote START is issued |
+| Physical green while active | Pump off and vent open; green acts as a toggle |
+| Press green after a stop | No restart until green is released and pressed again |
 | Physical START while disconnected | Runs with sensor checks and autonomous timer; app heartbeat not required |
 | Physical buttons while connected | Reported phase updates in the app |
 | Disconnect during an active run | Board stops/vents; phone clears live telemetry and records unknown connection state |
