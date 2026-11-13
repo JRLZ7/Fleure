@@ -4,6 +4,36 @@ Fleure combines an ESP32 pump/vent controller, an Expo patient app, a Node.js AP
 
 This is a bench prototype. The pressure choices are implementation settings, not validated treatment recommendations. Physical pressure accuracy, overshoot, emergency release and failure behavior require hardware verification and independent protection before human use.
 
+For non-technical setup and use, see the [basic user guide](docs/USER_GUIDE.md).
+
+## Current status
+
+The current branch supports two therapy paths on the matching ESP32 firmware:
+
+- **Manual therapy:** choose a pressure from 125–275 mmHg and a duration from
+  2:00–6:00, then press **Start**. The device regulates pressure, owns the
+  countdown and vents when the run completes or stops.
+- **Automated RIPC therapy:** when experimental automation is enabled on the
+  firmware, the app shows an **Automated RIPC therapy** button. The device
+  inflates while recording the pressure waveform, estimates systolic pressure,
+  selects an estimated systolic value plus 10 mmHg (capped at 275 mmHg), and
+  then begins the selected timed hold. The timer does not start until the
+  estimate is accepted.
+
+Automated systolic estimation is an engineering prototype, not a validated
+blood-pressure measurement, diagnosis or treatment recommendation. A failed
+estimate stops the pump and opens the vent; it does not guess a target or
+continue automatically. The firmware's automation flag is enabled by default
+in this branch, but it can be disabled for a manual-only build.
+
+The implemented prototype currently provides live pressure and device-owned
+remaining time, local event queuing and explicit upload to the API, and a
+clinician dashboard for uploaded sessions. It does **not** provide validated
+pressure accuracy, independent emergency protection, automatic reconnect or
+resume, stored pressure graphs, authenticated device identity, or a complete
+multi-cycle RIPC protocol. Real hardware, native phone, BLE and pneumatic
+acceptance testing remain outstanding.
+
 ## Current behavior
 
 | Setting or function | Implementation |
@@ -131,6 +161,7 @@ Pressing green again stops an active run and opens the vent; after a stop condit
 | apps/api | Express/TypeScript API and SQLite storage |
 | firmware/FleureBLE | ESP32 sketch and TherapyController.h |
 | docs/TESTING.md | Current verification record and acceptance procedures |
+| docs/USER_GUIDE.md | Plain-language patient and clinician instructions |
 | packages/protocol | Protocol-v2 wire-format reference |
 
 The v2 implementation is defined by `apps/mobile/src/protocol.ts`, `ble.ts`, `FleureBLE.ino` and `TherapyController.h`. Older LED-demo documentation and CONTEXT.md may describe superseded pins, sensors or plans.
