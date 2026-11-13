@@ -55,9 +55,11 @@ npm exec -w @fleure/mobile -- expo export --platform web
 npm audit
 ```
 
-These commands are retained from the repository's original workflow and were not rerun against a complete checkout for this update. No package manifests, test suite or clinician source checkout was supplied with the source-file update.
+The repository workflow runs the host firmware tests, JavaScript tests, workspace
+type checks and clinician production build in CI. The Expo export and audit
+commands are additional local checks; neither is a native hardware or BLE test.
 
-Before running them, remove the obsolete simulator file and migrate any tests/imports using its previous `Driver.command(on)` interface. The current driver exposes `start(settings)` and `stop()`. Align any `packages/protocol` documentation with the v2 wire format in [../firmware/README.md](../firmware/README.md).
+The current driver exposes `start(settings)` and `stop()`. The protocol-v2 wire format is documented in [../packages/protocol/README.md](../packages/protocol/README.md) and [../firmware/README.md](../firmware/README.md).
 
 Review audit findings against the installed dependency versions; do not apply forced major-version changes without checking Expo/native compatibility. A successful web or iOS JavaScript export is not a native build or a BLE test.
 
@@ -119,7 +121,7 @@ Use a bench fixture and independent reference measurement. Where precise thresho
 | Target 275; sample at 300 | Overpressure fault, not timer start/continuation |
 | Sensor integrity/math error, communication failure or invalid reading | Sensor fault; pump off and vent open; pressure invalid rather than a stale live value |
 | Last valid pressure exceeds 250 ms age | Sensor fault and stop/vent |
-| Initial band not reached within 60 seconds | Pressure-build-timeout fault; stop/vent |
+| Initial band not reached within 120 seconds | Pressure-build-timeout fault; stop/vent |
 | Countdown reaches zero | Completed, zero remaining seconds, pump off, vent open; no automatic new run |
 | Duplicate START during active run | Rejected as busy; original duration and countdown are unchanged |
 | Fault resolves to healthy pressure | No automatic restart; a fresh explicit START is still required |

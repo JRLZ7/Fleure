@@ -4,6 +4,36 @@ Fleure combines an ESP32 pump/vent controller, an Expo patient app, a Node.js AP
 
 This is a bench prototype. The pressure choices are implementation settings, not validated treatment recommendations. Physical pressure accuracy, overshoot, emergency release and failure behavior require hardware verification and independent protection before human use.
 
+For non-technical setup and use, see the [basic user guide](docs/USER_GUIDE.md).
+
+## Current status
+
+The current branch supports two therapy paths on the matching ESP32 firmware:
+
+- **Manual therapy:** choose a pressure from 125–275 mmHg and a duration from
+  2:00–6:00, then press **Start**. The device regulates pressure, owns the
+  countdown and vents when the run completes or stops.
+- **Automated RIPC therapy:** when experimental automation is enabled on the
+  firmware, the app shows an **Automated RIPC therapy** button. The device
+  inflates while recording the pressure waveform, estimates systolic pressure,
+  selects an estimated systolic value plus 10 mmHg (capped at 275 mmHg), and
+  then begins the selected timed hold. The timer does not start until the
+  estimate is accepted.
+
+Automated systolic estimation is an engineering prototype, not a validated
+blood-pressure measurement, diagnosis or treatment recommendation. A failed
+estimate stops the pump and opens the vent; it does not guess a target or
+continue automatically. The firmware's automation flag is enabled by default
+in this branch, but it can be disabled for a manual-only build.
+
+The implemented prototype currently provides live pressure and device-owned
+remaining time, local event queuing and explicit upload to the API, and a
+clinician dashboard for uploaded sessions. It does **not** provide validated
+pressure accuracy, independent emergency protection, automatic reconnect or
+resume, stored pressure graphs, authenticated device identity, or a complete
+multi-cycle RIPC protocol. Real hardware, native phone, BLE and pneumatic
+acceptance testing remain outstanding.
+
 ## Current behavior
 
 | Setting or function | Implementation |
@@ -17,7 +47,7 @@ This is a bench prototype. The pressure choices are implementation settings, not
 | Completion | ESP32 stops pump, opens vent and reports Completed / 0:00 |
 | Cutoff | Measured pressure at or above 300 mmHg stops pump and opens vent |
 | Sensor fault | Invalid/missing data or stale readings stop pump and open vent |
-| Pressure-build timeout | 60 seconds without reaching the initial band; configurable bench default |
+| Pressure-build timeout | 120 seconds without reaching the initial band; configurable bench default |
 
 The ESP32 owns regulation, timing and outputs. The app displays device reports rather than running its own countdown. Regulation uses on/off hysteresis, not PWM or PID: pump toward target, stop at or above target, and refill below target minus 5 mmHg. The valve stays closed during an active run; overshoot below the 300 mmHg fault cutoff is not actively vented. Actual pressure stability is not guaranteed by software tests.
 
@@ -25,7 +55,7 @@ The 300 mmHg cutoff takes priority over the timer-start band. For a target of 27
 
 ## Requirements
 
-- Node.js 24.x and npm; the API uses Node's built-in SQLite.
+- Node.js 22.x or newer and npm; the API uses Node's built-in SQLite.
 - A BLE-capable ESP32 with the pins required by the sketch, the pump/valve driver circuits and an MPRLS0300YG00001BB pressure sensor.
 - Arduino IDE with Espressif Arduino-ESP32 3.x and its bundled BLE/Wire libraries.
 - A physical Android/iOS phone with a development build containing `react-native-ble-plx`. Expo Go cannot provide this module.
@@ -33,11 +63,14 @@ The 300 mmHg cutoff takes priority over the timer-start band. For a target of 27
 
 The repository's existing lockfile and Expo configuration remain authoritative for dependency versions. The source update introduces no new mobile native dependency and uses React Native's built-in SafeAreaView.
 
-## Install the matching source files
+## Use the matching source files
 
-Replace `apps/mobile/App.tsx` and `apps/mobile/src/{ble.ts,ble.web.ts,protocol.ts}` with the pressure-update versions. Keep `bluetoothReady.ts`. Remove obsolete `src/simulator.ts` and any tests/imports that still depend on its old driver interface.
-
-Keep `TherapyController.h` beside `firmware/FleureBLE/FleureBLE.ino` and upload the new sketch. The app and firmware must both use protocol v2. The new app rejects legacy one-byte state frames, and the new firmware rejects legacy one-byte START commands. See [firmware/README.md](firmware/README.md) for wiring, regulation and protocol details.
+The checked-in mobile app and firmware use protocol v2. Keep
+`TherapyController.h` beside `firmware/FleureBLE/FleureBLE.ino` when opening
+the sketch in Arduino IDE, and upload the matching firmware. The app rejects
+legacy one-byte state frames, and the firmware rejects legacy one-byte START
+commands. See [firmware/README.md](firmware/README.md) for wiring, regulation
+and protocol details.
 
 ## Configure accounts and API
 
@@ -128,7 +161,8 @@ Pressing green again stops an active run and opens the vent; after a stop condit
 | apps/api | Express/TypeScript API and SQLite storage |
 | firmware/FleureBLE | ESP32 sketch and TherapyController.h |
 | docs/TESTING.md | Current verification record and acceptance procedures |
-| packages/protocol | Existing protocol documentation; align it with v2 before using it as a wire-format reference |
+| docs/USER_GUIDE.md | Plain-language patient and clinician instructions |
+| packages/protocol | Protocol-v2 wire-format reference |
 
 The v2 implementation is defined by `apps/mobile/src/protocol.ts`, `ble.ts`, `FleureBLE.ino` and `TherapyController.h`. Older LED-demo documentation and CONTEXT.md may describe superseded pins, sensors or plans.
 

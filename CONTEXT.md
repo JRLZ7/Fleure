@@ -1,6 +1,6 @@
 # Fleure: ESP32 pressure-control cuff project
 
-Updated: October 26, 2026.
+Updated: November 13, 2026.
 
 This file describes the current source implementation and the latest user-reported hardware decisions. Implemented code, proposed circuit details and verified physical behavior are different categories. The source files and hardware measurements take precedence over older project summaries.
 
@@ -28,7 +28,9 @@ The configured pressure choices are project requirements, not validated treatmen
 | firmware/README.md | Current firmware wiring, behavior and detailed v2 byte layout |
 | docs/TESTING.md | Verification record and outstanding acceptance procedures |
 
-Remove the obsolete mobile `src/simulator.ts` and migrate tests/imports that use its old interface. The current driver exposes `start(settings)` and `stop()`, replacing `command(on)`. Align any older `packages/protocol` documentation with v2 before relying on it.
+The checked-in mobile source has no simulator driver. The current driver exposes
+`start(settings)` and `stop()`, and the protocol reference in
+`packages/protocol` documents v2.
 
 ## 3. App settings and session behavior
 
@@ -73,7 +75,7 @@ This is hysteretic regulation intended to control pressure near the target. Actu
 | Measured pressure ≥300 mmHg | Fault; pump off, vent open |
 | Invalid/missing pressure or sensor status fault | Sensor fault; pump off, vent open |
 | Pressure reading older than 250 ms | Sensor fault; pump off, vent open |
-| Initial start band not reached within 60 seconds | Build-timeout fault; pump off, vent open |
+| Initial start band not reached within 120 seconds | Build-timeout fault; pump off, vent open |
 | App STOP | Stop and vent |
 | Established BLE disconnect | Stop and vent, including a physically started run |
 | Remote heartbeat absent for more than five seconds | Stop and vent a remotely started run |
@@ -88,15 +90,15 @@ Green physical START/STOP uses the last accepted board settings, initially 200 m
 
 | Connection | ESP32 connection | Current firmware assumption |
 | --- | --- | --- |
-| Physical START button | GPIO 18 to GND | INPUT_PULLUP, active LOW |
-| Pump transistor control | GPIO 25 | HIGH runs pump; LOW stops pump |
-| Valve transistor control | GPIO 26 | HIGH energizes/closes vent; LOW opens vent |
-| Pressure SDA | GPIO 21 | I²C data |
-| Pressure SCL | GPIO 22 | I²C clock |
+| Physical START button | GPIO 21 to GND | INPUT_PULLUP, active LOW |
+| Pump transistor control | GPIO 33 | HIGH runs pump; LOW stops pump |
+| Valve transistor control | GPIO 32 | HIGH energizes/closes vent; LOW opens vent |
+| Pressure SDA | GPIO 16 | I²C data |
+| Pressure SCL | GPIO 17 | I²C clock |
 | Sensor supply | 3V3 and GND | 3.3 V sensor power; common ground |
 | ESP32 bench power | USB | Pump/valve load power is external |
 
-These are the pressure-control sketch's assignments. Earlier GPIO 27/26 L298N and GPIO 21 valve mappings are obsolete. A separate user-shared manual GPIO test sketch is not the integrated pressure/BLE controller.
+These are the current pressure-control sketch's assignments. Earlier GPIO 27/26 L298N and GPIO 21 valve mappings are obsolete. A separate user-shared manual GPIO test sketch is not the integrated pressure/BLE controller.
 
 The selected sensor is **Honeywell MPRLS0300YG00001BB**, a 0–300 mmHg gauge-pressure breakout using I²C address 0x18 and transfer function B. The code uses that calibration directly, not a generic 25 PSI/transfer-A configuration, and does not subtract atmospheric pressure.
 
@@ -192,7 +194,7 @@ Next priorities:
 2. Verify valve port behavior, power-off venting, independent pressure protection and safe startup GPIO levels on a bench fixture.
 3. Validate pressure-sensor wiring/calibration and physical pressure response across the selectable settings, including overshoot and release.
 4. Complete native BLE, interruption, repeated-session and runtime-memory tests; record the exact hardware/software versions.
-5. Rerun repository checks after integrating matching v2 app/firmware and removing obsolete simulator dependencies.
+5. Rerun repository checks after any app/firmware integration changes.
 6. Design persistent pressure-history storage, authenticated device identity and any multi-cycle RIPC behavior as separate future work with explicit requirements and validation.
 
 Do not restore earlier L298N pins, LED labels, fixed 20-second cycles or simulator fallback based on the old CONTEXT.md. Preserve the current pressure/timer requirements unless the user explicitly changes them.

@@ -16,11 +16,11 @@ The sketch has been host-compiled against API stubs and exercised with mocked I/
 
 | Connection | GPIO | Assumption |
 | --- | --- | --- |
-| Green START | 18 | Button to GND, internal pull-up |
-| Pump driver input | 25 | HIGH runs pump; LOW stops it |
-| Solenoid driver input | 26 | HIGH closes vent; LOW opens vent |
-| Sensor SDA | 21 | I²C data |
-| Sensor SCL | 22 | I²C clock |
+| Green START | 21 | Button to GND, internal pull-up |
+| Pump driver input | 33 | HIGH runs pump; LOW stops it |
+| Solenoid driver input | 32 | HIGH closes vent; LOW opens vent |
+| Sensor SDA | 16 | I²C data |
+| Sensor SCL | 17 | I²C clock |
 
 Check pin availability on the actual board. GPIOs control suitable driver circuits; they do not supply load power. Use common ground and the sensor board's documented 3.3 V power/I²C connections. Verify pull-ups and voltage levels on the breakout.
 
@@ -51,7 +51,7 @@ The cutoff uses the unsmoothed measurement at **300 mmHg or above**. This equals
 | Duration | 120–360 seconds in 30-second steps |
 | Boot defaults | 200 mmHg; 120 seconds |
 | Initial timer-start band | Target ±5 mmHg, inclusive, subject to cutoff |
-| Maximum pressure-build time | 60 seconds before first band entry |
+| Maximum pressure-build time | 120 seconds before first band entry |
 
 An accepted START requires valid settings and a fresh pressure sample below 300 mmHg. It enters **Pressurizing**. The first sample in the start band immediately begins **Running**; there is no dwell requirement. Once started, the countdown does not pause if pressure leaves the band. A duplicate START during an active run is rejected without resetting its timer.
 
@@ -59,7 +59,7 @@ Regulation uses hysteresis: stop pumping at or above target and refill below tar
 
 At zero, the board reports **Completed**, remaining time zero, pump LOW and valve LOW. A normal subsequent STOP/disconnect preserves completion; faults remain latched until a new accepted START. A new START after a fault requires healthy fresh pressure below the cutoff.
 
-The build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This branch enables experimental automation (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=1`) for controlled bench testing. Set the flag to `0` for a manual-only build, where physical green START uses manual settings and automation is hidden in the app. Enabled builds use automated physical START and advertise support for the app's **Automated RIPC therapy** button. That path samples the MPRLS waveform during inflation up to 175 mmHg, estimates systolic pressure using a smoothed pulse envelope, and selects systolic + 10 mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
+The build timeout is a configurable bench default in `TherapyController.h`. After the countdown starts, runtime is bounded by the selected duration instead. This branch enables experimental automation by default (`FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION=1`) for controlled bench testing. Set the flag to `0` for a manual-only build, where physical green START uses manual settings and automation is hidden in the app. Enabled builds use automated physical START and advertise support for the app's **Automated RIPC therapy** button. That path samples the MPRLS waveform during inflation up to 175 mmHg, estimates systolic pressure using a smoothed pulse envelope, and selects systolic + 10 mmHg capped at 275 mmHg before the timed hold. The ordinary app Start command remains a manually selected target. This is an engineering adaptation of the referenced esp-bp signal-processing approach, not a clinically validated blood-pressure measurement or treatment protocol.
 
 ## Buttons, remote control and stop conditions
 
