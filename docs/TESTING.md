@@ -85,7 +85,7 @@ Confirm a normally-open vent, active-HIGH driver inputs, suitable load power/dri
 | Action | Expected |
 | --- | --- |
 | Launch compatible native development build | Login renders without missing-native-component errors |
-| Enter email/password/server URL | Each field can be reached above the keyboard by scrolling/focus navigation; Next moves through fields and Done dismisses |
+| Enter email/password | Both fields can be reached above the keyboard by scrolling/focus navigation; Next moves to the password field and Done dismisses |
 | Tap/scroll with keyboard open | Form remains usable; taps on handled controls work and scrolling does not immediately dismiss the keyboard |
 | Sign in as patient | Correct seeded account accepted; clinician account redirected to the dashboard workflow |
 | Connect to matching v2 firmware | Fresh live pressure and device phase appear; initial board settings populate selectors |
