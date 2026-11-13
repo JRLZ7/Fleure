@@ -41,6 +41,17 @@ int main() {
   assert(rampWithPulse.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::Accepted);
   assert(systolic >= 80 && systolic <= 240);
 
+  // Startup transients below the supported systolic range must not set the
+  // envelope threshold and make a valid later candidate disappear.
+  SystolicEstimator latePulse;
+  for (int i = 0; i < 775; ++i) {
+    const float pulse = i >= 300 ? 0.5f * sinf(i * 0.1256637f) : 0.0f;
+    latePulse.sample(2.4f + i * 0.223f + pulse);
+  }
+  assert(latePulse.ready(175.2f));
+  assert(latePulse.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::Accepted);
+  assert(systolic >= 80 && systolic <= 240);
+
   // At the maximum polling rate, even the entire build-timeout window fits.
   SystolicEstimator fullWindow;
   unsigned expectedSamples = 0;

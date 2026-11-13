@@ -83,7 +83,9 @@ struct SystolicEstimator {
         localMean += pressures[j];
       const float signal = pressures[i] - localMean / OscillationWindowSamples;
       filteredEnvelope += 0.18f * (fabsf(signal) - filteredEnvelope);
-      if (filteredEnvelope > maximum) maximum = filteredEnvelope;
+      if (pressures[i] >= 80.0f && pressures[i] <= 240.0f &&
+          filteredEnvelope > maximum)
+        maximum = filteredEnvelope;
       const int direction = signal > MinimumOscillationMmHg ? 1 :
                             signal < -MinimumOscillationMmHg ? -1 : 0;
       if (direction == 0) continue;
