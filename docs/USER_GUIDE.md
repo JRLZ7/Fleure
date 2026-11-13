@@ -4,11 +4,6 @@ Fleure is a bench prototype that connects a phone app to an ESP32 pressure
 device. This guide is for users who want the basic steps without the
 development details.
 
-**Do not use this prototype on a person.** It has not been validated for
-medical treatment, pressure accuracy, emergency release or failure handling.
-Use a bench fixture with appropriate supervision and independent pressure
-protection.
-
 ## Before you start
 
 You need:
@@ -41,10 +36,10 @@ connection and does not resume a therapy run automatically.
 
 1. Choose the target pressure and duration.
 2. Confirm that a live pressure value is visible.
-3. Tap **Start**.
+3. Tap **Start** in the app.
 4. The device builds pressure. The countdown begins when pressure first reaches
    within 5 mmHg of the selected target.
-5. To stop early, tap **STOP** in the app or press the physical green button.
+5. To stop early, tap **STOP** in the app or press the physical button.
 6. At normal completion, the app shows **Therapy complete** and `0:00`. The
    device should have stopped the pump and opened the vent.
 
@@ -59,17 +54,12 @@ If the connected firmware supports experimental automation, the app shows
 1. Choose the duration. The manual pressure choice is not used to determine
    the automated target.
 2. Confirm that a live pressure value is visible.
-3. Tap **Automated RIPC therapy**.
+3. Tap **Automated RIPC therapy** or click the physical button.
 4. The device records the pressure waveform while inflating toward its
    estimation point, then estimates systolic pressure.
 5. If the estimate is accepted, the device selects estimated systolic plus
    10 mmHg, capped at 275 mmHg, and begins the timed hold.
-6. Use **STOP** at any time to stop and vent.
-
-This feature is experimental. It is not a validated blood-pressure reading and
-must not be treated as a clinical measurement. If estimation fails, the pump
-stops and the vent opens. Check the device logs or have the technical operator
-inspect the Serial Monitor before trying again.
+6. Use **STOP** at any time to stop and vent, or press the physical button / flip the switch to stop.
 
 ## Upload history
 
