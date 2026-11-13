@@ -20,6 +20,8 @@ struct Controller {
   static constexpr uint32_t SensorMaxAgeMs = 250;
   static constexpr uint32_t InflationTimeoutMs = 120000; // Bench default; validate for your pneumatic hardware.
   static constexpr uint16_t StartTolerance = 5;
+  static constexpr uint16_t AutomatedInflationTarget = 150;
+  static constexpr uint16_t AutomatedTargetOffset = 10;
   static constexpr float CutoffMmHg = 300.0f;
   Phase phase = Phase::Idle;
   Reason reason = Reason::None;
@@ -70,11 +72,11 @@ struct Controller {
   }
   Result startAutomated(uint16_t seconds, uint32_t now) {
 if (!FLEURE_ENABLE_EXPERIMENTAL_AUTOMATION) return Result::Unsafe;
-    if (!settingsValid(200, seconds)) return Result::InvalidSettings;
+    if (!settingsValid(AutomatedInflationTarget, seconds)) return Result::InvalidSettings;
     if (active()) return Result::Busy;
     if (!pressureValid || uint32_t(now - lastSample) > SensorMaxAgeMs || pressure >= CutoffMmHg)
       return Result::Unsafe;
-    target = 200; duration = seconds; mode = Mode::AutomatedRipc; systolic = 0;
+    target = AutomatedInflationTarget; duration = seconds; mode = Mode::AutomatedRipc; systolic = 0;
     remainingMs = uint32_t(seconds) * 1000;
     startedAt = now; timerStarted = false; phase = Phase::EstimatingSystolic; reason = Reason::None;
     pump = false; ventClosed = true; ++runId;
@@ -96,7 +98,7 @@ bool acceptSystolic(uint16_t value, uint32_t now) {
     return false;
   }
 
-  const uint16_t proposed = uint16_t(value) + 50;
+  const uint16_t proposed = uint16_t(value) + AutomatedTargetOffset;
 
   target = proposed > 275 ? 275 : proposed;
 
