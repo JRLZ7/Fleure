@@ -124,6 +124,11 @@ void stop(Reason why) {
     if (!timerStarted && uint32_t(now - startedAt) >= InflationTimeoutMs) {
       fail(Reason::InflationTimeout); return;
     }
+    if (phase == Phase::EstimatingSystolic) {
+      ventClosed = true;
+      pump = pressure < target;
+      return;
+    }
     if (!timerStarted) {
       if (pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
         timerStarted = true; countdownAt = now; phase = Phase::Running;

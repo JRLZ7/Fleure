@@ -157,7 +157,7 @@ int main() {
       estimator.sample(pressure);
       c.tick(i * 20);
     }
-    assert(c.phase == Phase::EstimatingSystolic && !c.pump && !c.ventClosed);
+    assert(c.phase == Phase::EstimatingSystolic && !c.pump && c.ventClosed);
     uint16_t estimate = 0;
     assert(estimator.ready(c.pressure));
     assert(!estimator.estimate(estimate));
