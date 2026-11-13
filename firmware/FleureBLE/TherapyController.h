@@ -129,28 +129,31 @@ void stop(Reason why) {
       pump = pressure < target;
       return;
     }
-    if (!timerStarted) {
-      if (pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
-        timerStarted = true; countdownAt = now; phase = Phase::Running;
-      } else if (pressure > target + StartTolerance) {
-        // A computed automated target can be below the pressure used for
-        // estimation. Open the vent until the initial band is reached.
-        pump = false;
-        ventClosed = false;
-        return;
-      } else {
-        ventClosed = true;
-        pump = pressure < target - StartTolerance;
-        return;
-      }
-    }
     if (timerStarted) {
       const uint32_t elapsed = now - countdownAt;
       remainingMs = elapsed >= uint32_t(duration) * 1000 ? 0 : uint32_t(duration) * 1000 - elapsed;
       if (remainingMs == 0) { phase = Phase::Completed; reason = Reason::Complete; pump = false; ventClosed = false; return; }
+      // Once the initial band is reached, regulate using only the pump.
+      ventClosed = true;
+      if (pressure >= target) pump = false;
+      else if (pressure < target - StartTolerance) pump = true;
+      return;
     }
-    // Once the initial band is reached, regulate using only the pump and keep
-    // the vent closed. Stop at/above target and refill below target-5.
+    if (pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
+      timerStarted = true; countdownAt = now; phase = Phase::Running;
+    } else if (pressure > target + StartTolerance) {
+      // A computed automated target can be below the pressure used for
+      // estimation. Open the vent until the initial band is reached.
+      pump = false;
+      ventClosed = false;
+      return;
+    } else {
+      ventClosed = true;
+      pump = pressure < target - StartTolerance;
+      return;
+    }
+    const uint32_t elapsed = now - countdownAt;
+    remainingMs = elapsed >= uint32_t(duration) * 1000 ? 0 : uint32_t(duration) * 1000 - elapsed;
     ventClosed = true;
     if (pressure >= target) pump = false;
     else if (pressure < target - StartTolerance) pump = true;

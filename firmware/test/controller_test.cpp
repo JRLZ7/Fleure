@@ -87,6 +87,9 @@ int main() {
     assert(!c.pump && !c.ventClosed);
     sampleAt(c, 170, 15);
     assert(c.timerStarted && c.phase == Phase::Running);
+    sampleAt(c, 180, 25);
+    assert(c.timerStarted && c.phase == Phase::Running);
+    assert(!c.pump && c.ventClosed);
   }
   {
     Controller c;
