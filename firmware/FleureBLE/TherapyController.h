@@ -20,7 +20,7 @@ struct Controller {
   static constexpr uint32_t SensorMaxAgeMs = 250;
   static constexpr uint32_t InflationTimeoutMs = 120000; // Bench default; validate for your pneumatic hardware.
   static constexpr uint16_t StartTolerance = 5;
-  static constexpr uint16_t AutomatedInflationTarget = 150;
+  static constexpr uint16_t AutomatedInflationTarget = 175;
   static constexpr uint16_t AutomatedTargetOffset = 10;
   static constexpr float CutoffMmHg = 300.0f;
   Phase phase = Phase::Idle;
@@ -121,19 +121,39 @@ void stop(Reason why) {
     if (!active()) { pump = false; ventClosed = false; return; }
     if (!pressureValid) { fail(Reason::Sensor); return; }
     if (pressure >= CutoffMmHg) { fail(Reason::Overpressure); return; }
-    if (phase == Phase::Pressurizing && !timerStarted && pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
-      timerStarted = true; countdownAt = now; phase = Phase::Running;
+    if (!timerStarted && uint32_t(now - startedAt) >= InflationTimeoutMs) {
+      fail(Reason::InflationTimeout); return;
+    }
+    if (phase == Phase::EstimatingSystolic) {
+      ventClosed = true;
+      pump = pressure < target;
+      return;
     }
     if (timerStarted) {
       const uint32_t elapsed = now - countdownAt;
       remainingMs = elapsed >= uint32_t(duration) * 1000 ? 0 : uint32_t(duration) * 1000 - elapsed;
       if (remainingMs == 0) { phase = Phase::Completed; reason = Reason::Complete; pump = false; ventClosed = false; return; }
-    } else if (uint32_t(now - startedAt) >= InflationTimeoutMs) {
-      fail(Reason::InflationTimeout); return;
+      // Once the initial band is reached, regulate using only the pump.
+      ventClosed = true;
+      if (pressure >= target) pump = false;
+      else if (pressure < target - StartTolerance) pump = true;
+      return;
     }
-    // Regulate using only the pump; keep the vent closed throughout an active run.
-    // Stop at/above target and refill below target-5. Overshoot is not actively
-    // vented here; completion, STOP and fault paths above still release pressure.
+    if (pressure >= target - StartTolerance && pressure <= target + StartTolerance) {
+      timerStarted = true; countdownAt = now; phase = Phase::Running;
+    } else if (pressure > target + StartTolerance) {
+      // A computed automated target can be below the pressure used for
+      // estimation. Open the vent until the initial band is reached.
+      pump = false;
+      ventClosed = false;
+      return;
+    } else {
+      ventClosed = true;
+      pump = pressure < target - StartTolerance;
+      return;
+    }
+    const uint32_t elapsed = now - countdownAt;
+    remainingMs = elapsed >= uint32_t(duration) * 1000 ? 0 : uint32_t(duration) * 1000 - elapsed;
     ventClosed = true;
     if (pressure >= target) pump = false;
     else if (pressure < target - StartTolerance) pump = true;

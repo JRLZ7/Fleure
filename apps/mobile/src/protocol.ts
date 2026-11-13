@@ -97,7 +97,9 @@ export function validateSettings(s: TherapySettings): void {
 function validateTelemetrySettings(s: TherapySettings): void {
   if (
     !Number.isInteger(s.targetMmHg)
-    || s.targetMmHg < 125
+    // Automated targets are systolic + 10; the controller accepts systolic
+    // estimates from 80 mmHg, so the lowest valid computed target is 90.
+    || s.targetMmHg < 50
     || s.targetMmHg > 275
     || !(DURATIONS as readonly number[]).includes(s.durationSeconds)
   ) {
@@ -180,7 +182,7 @@ export function encodeStart(
 ): Uint8Array {
   // Automated targeting ignores the manual pressure selection. Send a valid
   // placeholder and validate the duration without coupling the two modes.
-  const settings = automated ? { ...s, targetMmHg: 150 } : s;
+  const settings = automated ? { ...s, targetMmHg: 175 } : s;
   validateSettings(settings);
 
   const b = new Uint8Array(automated ? 8 : 7);

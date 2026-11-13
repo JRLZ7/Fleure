@@ -25,7 +25,7 @@ int main() {
       sampleAt(c, target, 10);
       assert(c.timerStarted && !c.pump && c.ventClosed);
       const uint32_t countdownAt = c.countdownAt;
-      // Previously opened the vent at target+25; it must now stay closed.
+      // Once running, pressure above target does not open the vent.
       sampleAt(c, target < 275 ? target + 26 : 299, 20);
       assert(c.active() && !c.pump && c.ventClosed);
       assert(c.countdownAt == countdownAt);
@@ -45,7 +45,7 @@ int main() {
       Controller above;
       above.sample(target + 6, 0);
       assert(above.start(target, duration, 0) == Result::Accepted);
-      assert(!above.timerStarted && !above.pump && above.ventClosed);
+      assert(!above.timerStarted && !above.pump && !above.ventClosed);
       sampleAt(above, target + 5, 1);
       assert(above.timerStarted && !above.pump && above.ventClosed);
     }
@@ -84,8 +84,12 @@ int main() {
     assert(!c.timerStarted && c.phase == Phase::EstimatingSystolic);
     assert(c.acceptSystolic(165, 10));
     assert(c.target == 175 && c.phase == Phase::Pressurizing);
+    assert(!c.pump && !c.ventClosed);
     sampleAt(c, 170, 15);
     assert(c.timerStarted && c.phase == Phase::Running);
+    sampleAt(c, 180, 25);
+    assert(c.timerStarted && c.phase == Phase::Running);
+    assert(!c.pump && c.ventClosed);
   }
   {
     Controller c;
