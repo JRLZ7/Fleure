@@ -37,7 +37,7 @@ int main() {
   SystolicEstimator rampWithPulse;
   for (int i = 0; i < 700; ++i)
     rampWithPulse.sample(2.4f + i * 0.21f + 0.5f * sinf(i * 0.1256637f));
-  assert(rampWithPulse.ready(150.5f));
+  assert(rampWithPulse.ready(175.5f));
   assert(rampWithPulse.estimateDetailed(systolic) == SystolicEstimator::EstimateStatus::Accepted);
   assert(systolic >= 80 && systolic <= 240);
 

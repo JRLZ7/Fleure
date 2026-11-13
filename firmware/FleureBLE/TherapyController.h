@@ -20,7 +20,7 @@ struct Controller {
   static constexpr uint32_t SensorMaxAgeMs = 250;
   static constexpr uint32_t InflationTimeoutMs = 120000; // Bench default; validate for your pneumatic hardware.
   static constexpr uint16_t StartTolerance = 5;
-  static constexpr uint16_t AutomatedInflationTarget = 150;
+  static constexpr uint16_t AutomatedInflationTarget = 175;
   static constexpr uint16_t AutomatedTargetOffset = 10;
   static constexpr float CutoffMmHg = 300.0f;
   Phase phase = Phase::Idle;

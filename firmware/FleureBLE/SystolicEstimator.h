@@ -15,7 +15,7 @@ struct SystolicEstimator {
   // Include both endpoints of the 120-second window (6001 samples, ~48 KB).
   static constexpr uint32_t RecordingDurationMs = 120000;
   static constexpr uint32_t MinimumSampleIntervalMs = 20;
-  static constexpr float ReadyPressureMmHg = 150.0f;
+  static constexpr float ReadyPressureMmHg = 175.0f;
   // A centered two-second window removes the approximately linear inflation
   // ramp while retaining the cardiac-pressure oscillation.
   static constexpr uint16_t OscillationWindowSamples = 101;

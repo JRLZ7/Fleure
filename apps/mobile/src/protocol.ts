@@ -180,7 +180,7 @@ export function encodeStart(
 ): Uint8Array {
   // Automated targeting ignores the manual pressure selection. Send a valid
   // placeholder and validate the duration without coupling the two modes.
-  const settings = automated ? { ...s, targetMmHg: 150 } : s;
+  const settings = automated ? { ...s, targetMmHg: 175 } : s;
   validateSettings(settings);
 
   const b = new Uint8Array(automated ? 8 : 7);
