@@ -103,6 +103,10 @@ bool acceptSystolic(uint16_t value, uint32_t now) {
   target = proposed > 275 ? 275 : proposed;
 
   systolic = value;
+  // Estimation replaces the initial 175 mmHg inflation build. Give the
+  // pressure-transition phase its own full timeout instead of applying the
+  // original build deadline after an estimate was accepted.
+  startedAt = now;
   phase = Phase::Pressurizing;
 
   tick(now);
