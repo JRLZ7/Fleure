@@ -94,3 +94,30 @@ test('estimation failure has its own fault reason without invalidating healthy p
   assert.equal(t.pumpOn, false);
   assert.equal(t.ventClosed, false);
 });
+
+import {
+  acceptedSystolic, classifySystolic, bloodPressureMessage,
+  SYSTOLIC_HIGH_MMHG, SYSTOLIC_LOW_MMHG,
+} from '../src/protocol.ts';
+
+test('classifies systolic estimates against the high/low limits', () => {
+  assert.equal(classifySystolic(SYSTOLIC_HIGH_MMHG), 'high');
+  assert.equal(classifySystolic(SYSTOLIC_HIGH_MMHG - 1), 'normal');
+  assert.equal(classifySystolic(SYSTOLIC_LOW_MMHG), 'normal');
+  assert.equal(classifySystolic(SYSTOLIC_LOW_MMHG - 1), 'low');
+  assert.match(bloodPressureMessage('high', 190), /too high.*not to do the therapy right now/);
+  assert.match(bloodPressureMessage('low', 85), /too low.*not to do the therapy right now/);
+  assert.equal(bloodPressureMessage('normal', 120), null);
+});
+
+test('recovers the systolic estimate only when an automated run leaves estimation', () => {
+  const estimating = decodeTelemetry(frame({ flags: 1 | 16 | 32, target: 175, phase: 6 }));
+  const pressurizing = decodeTelemetry(frame({ flags: 1 | 16 | 32, target: 200, phase: 1 }));
+  assert.equal(acceptedSystolic(estimating, pressurizing), 190);
+  assert.equal(acceptedSystolic(null, pressurizing), null);
+  assert.equal(acceptedSystolic(pressurizing, pressurizing), null);
+  const manual = decodeTelemetry(frame({ flags: 1, target: 200, phase: 1 }));
+  assert.equal(acceptedSystolic(estimating, manual), null);
+  const fault = decodeTelemetry(frame({ flags: 1 | 16 | 32, target: 175, phase: 5 }));
+  assert.equal(acceptedSystolic(estimating, fault), null);
+});

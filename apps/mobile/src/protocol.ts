@@ -75,6 +75,45 @@ export function manualSettingsForTelemetry(current: TherapySettings, t: Telemetr
   };
 }
 
+// Automated runs set target = estimated systolic + 10 (firmware
+// AutomatedTargetOffset), so the app can recover the estimate from telemetry.
+export const AUTOMATED_TARGET_OFFSET = 10;
+// Systolic limits outside which the app stops therapy and warns the patient.
+// Bench defaults, not clinically validated thresholds.
+export const SYSTOLIC_HIGH_MMHG = 180;
+export const SYSTOLIC_LOW_MMHG = 90;
+
+export type BloodPressureStatus = "high" | "low" | "normal";
+
+export function classifySystolic(systolic: number): BloodPressureStatus {
+  if (systolic >= SYSTOLIC_HIGH_MMHG) return "high";
+  if (systolic < SYSTOLIC_LOW_MMHG) return "low";
+  return "normal";
+}
+
+// Returns the device's systolic estimate the first time an automated run
+// leaves estimation with an accepted value, otherwise null.
+export function acceptedSystolic(previous: Telemetry | null, t: Telemetry): number | null {
+  if (
+    !previous
+    || previous.phase !== "estimating_systolic"
+    || previous.runId !== t.runId
+    || !t.automatedRun
+    || (t.phase !== "pressurizing" && t.phase !== "running")
+  ) return null;
+  return t.targetMmHg - AUTOMATED_TARGET_OFFSET;
+}
+
+export function bloodPressureMessage(status: BloodPressureStatus, systolic: number): string | null {
+  if (status === "high") {
+    return `Your blood pressure is too high (estimated systolic ${systolic} mmHg, limit ${SYSTOLIC_HIGH_MMHG}). It is recommended not to do the therapy right now. Therapy was stopped; rest and try again later, or contact your clinician.`;
+  }
+  if (status === "low") {
+    return `Your blood pressure is too low (estimated systolic ${systolic} mmHg, limit ${SYSTOLIC_LOW_MMHG}). It is recommended not to do the therapy right now. Therapy was stopped; rest and try again later, or contact your clinician.`;
+  }
+  return null;
+}
+
 export function isActive(t: Telemetry | null): boolean {
   return t?.phase === "estimating_systolic"
     || t?.phase === "pressurizing"

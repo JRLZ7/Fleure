@@ -15,7 +15,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { createBleDriver } from "./src/ble";
-import { Driver, DeviceState, Telemetry, isActive, PRESSURES, DURATIONS, formatTime, PHASE_LABELS, manualSettingsForTelemetry, supportsAutomation } from "./src/protocol";
+import { Driver, DeviceState, Telemetry, isActive, PRESSURES, DURATIONS, formatTime, PHASE_LABELS, manualSettingsForTelemetry, supportsAutomation, acceptedSystolic, classifySystolic, bloodPressureMessage } from "./src/protocol";
 type Event = {
   id: string;
   state: DeviceState;
@@ -53,6 +53,8 @@ export default function App() {
   const [durationSeconds, setDurationSeconds] = useState(120);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [bpAlert, setBpAlert] = useState("");
+  const [systolic, setSystolic] = useState<number | null>(null);
   const lastTelemetry = useRef<Telemetry | null>(null);
   const commandGeneration = useRef(0);
   const driver = useRef<Driver | null>(null),
@@ -149,6 +151,8 @@ export default function App() {
     const previous = lastTelemetry.current;
     lastTelemetry.current = t;
     setTherapy(t);
+    const estimate = acceptedSystolic(previous, t);
+    if (estimate !== null) checkBloodPressure(estimate);
     if (!previous || (isActive(t) && previous.runId !== t.runId)) {
       setTargetMmHg(current => manualSettingsForTelemetry({ targetMmHg: current, durationSeconds: t.durationSeconds }, t).targetMmHg);
       setDurationSeconds(t.durationSeconds);
@@ -158,12 +162,36 @@ export default function App() {
       event(isActive(t) ? "on" : "off", "device", `${t.phase}:${t.reason};target=${t.targetMmHg};duration=${t.durationSeconds};run=${t.runId}`);
     }
   }
+  function checkBloodPressure(estimate: number) {
+    setSystolic(estimate);
+    const status = classifySystolic(estimate);
+    const message = bloodPressureMessage(status, estimate);
+    if (!message) return;
+    setBpAlert(message);
+    event("off", "device", `bp_${status};systolic=${estimate}`);
+    void stopForBloodPressure();
+  }
+  async function stopForBloodPressure() {
+    const d = driver.current;
+    if (!d) return;
+    const generation = ++commandGeneration.current;
+    setStarting(false);
+    setStopping(true);
+    try {
+      await d.stop();
+    } catch (e) {
+      if (commandGeneration.current === generation) setError(`Could not stop therapy after the blood pressure warning: ${(e as Error).message}. Press STOP or the physical button now.`);
+    } finally {
+      if (commandGeneration.current === generation) setStopping(false);
+    }
+  }
   async function toggleTherapy(automated = false) {
     const d = driver.current;
     if (!d || !connected) return;
     const stop = isActive(lastTelemetry.current) || starting;
     const generation = ++commandGeneration.current;
     setError("");
+    if (!stop) { setBpAlert(""); setSystolic(null); }
     if (stop) setStopping(true); else setStarting(true);
     try {
       if (stop) await d.stop();
@@ -348,7 +376,7 @@ export default function App() {
   const settingsLocked = therapyActive || stopping;
   const reasonLabels: Record<string, string> = {
     sensor_fault: "Sensor unavailable or invalid. Pump stopped; vent open.",
-    systolic_estimation_failed: "Unable to estimate systolic pressure from the recorded signal. Pump stopped; vent open. Check the Serial Monitor for details.",
+    systolic_estimation_failed: "Unable to estimate systolic pressure from the recorded signal, or it was outside the 80–240 mmHg range the device accepts. Pump stopped; vent open. Do not repeat therapy if your blood pressure may be very high or low; check the Serial Monitor for details.",
     overpressure: "300 mmHg cutoff reached. Pump stopped; vent open.",
     pressure_build_timeout: "Target range was not reached within 60 seconds. Pump stopped; vent open.",
     heartbeat_timeout: "App heartbeat lost. Pump stopped; vent open.",
@@ -428,6 +456,8 @@ export default function App() {
                 <Text style={styles.timerValue}>{formatTime(countdown)}</Text>
                 <Text style={styles.deviceHint}>{therapy?.phase === "pressurizing" ? "Waiting for pressure to enter the ±5 mmHg range" : therapy?.phase === "running" ? "Countdown runs on your ESP32" : therapy?.phase === "completed" ? "Completed · pump off · vent open" : "Timer begins when target range is first reached"}</Text>
               </View>
+              {!!bpAlert && <View style={styles.bpAlert}><Text style={styles.bpAlertTitle}>Blood pressure warning</Text><Text accessibilityRole="alert" style={styles.bpAlertText}>{bpAlert}</Text></View>}
+              {!bpAlert && systolic !== null && <Text style={styles.deviceHint}>Estimated systolic {systolic} mmHg · within the safe range</Text>}
               {connected && therapy && reasonLabels[therapy.reason] && <Text accessibilityRole={therapy.phase === "fault" ? "alert" : undefined} style={styles.deviceHint}>{reasonLabels[therapy.reason]}</Text>}
               <ActionButton
                 title={stopping ? "Stopping…" : therapyActive ? "STOP" : "Start"}
@@ -576,6 +606,9 @@ const styles = StyleSheet.create({
   activityRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   activityDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#7C9F8E", marginTop: 6 },
   log: { flex: 1, color: "#5E746B", fontSize: 12, lineHeight: 19 },
+  bpAlert: { backgroundColor: "#FAEAE4", padding: 15, borderRadius: 16, borderWidth: 1, borderColor: "#E0A898", gap: 6 },
+  bpAlertTitle: { color: "#7C3025", fontSize: 15, fontWeight: "700" },
+  bpAlertText: { color: "#8A3227", fontSize: 14, lineHeight: 21 },
   errorBox: { backgroundColor: "#FAEAE4", padding: 15, borderRadius: 16, borderWidth: 1, borderColor: "#EBC8BC" },
   error: { color: "#8A3227", fontSize: 14, lineHeight: 21 },
   inline: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 9 },
