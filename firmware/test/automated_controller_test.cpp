@@ -126,6 +126,34 @@ static void testEstimationTimeout() {
   assert(!c.ventClosed);
 }
 
+static void testAcceptedEstimateGetsFreshTransitionTimeout() {
+  Controller c;
+  beginAutomated(c);
+  sampleAt(c, 175, Controller::InflationTimeoutMs - 1);
+
+  assert(c.acceptSystolic(133, Controller::InflationTimeoutMs - 1));
+  assert(c.target == 143);
+  assert(c.phase == Phase::Pressurizing);
+  assert(c.startedAt == Controller::InflationTimeoutMs - 1);
+
+  sampleAt(c, 143, Controller::InflationTimeoutMs);
+  assert(c.phase == Phase::Running);
+  assert(c.timerStarted);
+
+  Controller low;
+  beginAutomated(low);
+  sampleAt(low, 175, 100);
+  assert(low.acceptSystolic(80, 100));
+  assert(low.target == 90);
+  sampleAt(low, 80, 200);
+  assert(low.phase == Phase::Pressurizing);
+  assert(low.pump);
+  assert(!low.timerStarted);
+  sampleAt(low, 90, 300);
+  assert(low.phase == Phase::Running);
+  assert(low.timerStarted);
+}
+
 int main() {
   {
     Controller physical;
@@ -147,6 +175,7 @@ int main() {
   testTargetBounds();
   testStaleSample();
   testEstimationTimeout();
+  testAcceptedEstimateGetsFreshTransitionTimeout();
   {
     Controller c;
     SystolicEstimator estimator;
